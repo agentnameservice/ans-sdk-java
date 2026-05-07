@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.1.7](https://github.com/godaddy/ans-sdk-java/compare/v0.1.6...v0.1.7) (2026-05-06)
+
+
+### Features
+
+* implement SCITT verification for secure agent-to-agent communication ([eda268f](https://github.com/godaddy/ans-sdk-java/commit/eda268f2f8f356f7b9614bd84b840cc15e544cb5))
+
+### Bug Fixes
+
+* **scitt:** use correct CWT claims label and lenient issuer validation ([#55](https://github.com/godaddy/ans-sdk-java/issues/55)) ([4590737](https://github.com/godaddy/ans-sdk-java/commit/4590737bd1d8e9c65978886f14d6cdcab25083c6))
+
+
+### Miscellaneous
+
+* **deps:** Bump actions/cache from 5.0.3 to 5.0.5 ([#44](https://github.com/godaddy/ans-sdk-java/issues/44)) ([c7173d3](https://github.com/godaddy/ans-sdk-java/commit/c7173d35788b821034001fbedaa11252b835caff))
+* **deps:** Bump actions/upload-artifact from 7.0.0 to 7.0.1 ([#45](https://github.com/godaddy/ans-sdk-java/issues/45)) ([c2b1f64](https://github.com/godaddy/ans-sdk-java/commit/c2b1f64486107eee7b9b3da27f532f3350012a7d))
+* **deps:** Bump googleapis/release-please-action from 4.4.0 to 4.4.1 ([#43](https://github.com/godaddy/ans-sdk-java/issues/43)) ([f933b24](https://github.com/godaddy/ans-sdk-java/commit/f933b242115f6319bfefdb9014b00fa4321dcf03))
+* **deps:** Bump googleapis/release-please-action from 4.4.1 to 5.0.0 ([#49](https://github.com/godaddy/ans-sdk-java/issues/49)) ([dca2feb](https://github.com/godaddy/ans-sdk-java/commit/dca2feb171f7c727469aad6de8ef7c907359133f))
+* **deps:** Bump gradle-wrapper from 9.4.1 to 9.5.0 ([#54](https://github.com/godaddy/ans-sdk-java/issues/54)) ([e25eccc](https://github.com/godaddy/ans-sdk-java/commit/e25ecccd42dd61701bfd77ee1b10fd58af85dbda))
+* **deps:** Bump gradle/actions from 5.0.2 to 6.1.0 ([#40](https://github.com/godaddy/ans-sdk-java/issues/40)) ([a929df9](https://github.com/godaddy/ans-sdk-java/commit/a929df9eb0406399723c5276143e13d6a0703f68))
+* **deps:** Bump io.modelcontextprotocol.sdk:mcp from 0.17.2 to 1.1.1 ([#38](https://github.com/godaddy/ans-sdk-java/issues/38)) ([ece3cea](https://github.com/godaddy/ans-sdk-java/commit/ece3cea3bd42b34fc37bbf6d5416cc4edfa5aa3f))
+* **deps:** Bump io.modelcontextprotocol.sdk:mcp from 1.1.1 to 1.1.2 ([#53](https://github.com/godaddy/ans-sdk-java/issues/53)) ([91dec2b](https://github.com/godaddy/ans-sdk-java/commit/91dec2bbfb13a8665c3ffc29adb6357d97d1c95f))
+* **deps:** Bump mikepenz/action-junit-report from 6.3.1 to 6.4.0 ([#37](https://github.com/godaddy/ans-sdk-java/issues/37)) ([dc516a6](https://github.com/godaddy/ans-sdk-java/commit/dc516a6dd2e8b4a0b68cef9660e7d80683973940))
+* **deps:** Bump org.openapi.generator from 7.21.0 to 7.22.0 ([#52](https://github.com/godaddy/ans-sdk-java/issues/52)) ([293d663](https://github.com/godaddy/ans-sdk-java/commit/293d663d7cd33ef48c8eb7cf94f5af37a8ed75bd))
+
 ## [0.1.6](https://github.com/godaddy/ans-sdk-java/compare/v0.1.5...v0.1.6) (2026-04-08)
 
 

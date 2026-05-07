@@ -6,8 +6,6 @@
 ### Features
 
 * implement SCITT verification for secure agent-to-agent communication ([eda268f](https://github.com/godaddy/ans-sdk-java/commit/eda268f2f8f356f7b9614bd84b840cc15e544cb5))
-* implement SCITT verification for secure agent-to-agent communication                                                                                                                       ([eda268f](https://github.com/godaddy/ans-sdk-java/commit/eda268f2f8f356f7b9614bd84b840cc15e544cb5))
-
 
 ### Bug Fixes
 

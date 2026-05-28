@@ -23,7 +23,7 @@ dependencies {
     implementation("org.slf4j:slf4j-api:$slf4jVersion")
 
     // dnsjava for _ra-badge TXT record lookups (JNDI doesn't support all TXT features)
-    implementation("dnsjava:dnsjava:3.6.4")
+    implementation("dnsjava:dnsjava:3.6.5")
 
     // CBOR parsing for SCITT COSE_Sign1 structures
     implementation("com.upokecenter:cbor:$cborVersion")

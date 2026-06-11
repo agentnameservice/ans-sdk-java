@@ -7,7 +7,7 @@ plugins {
     application
 }
 
-val springBootVersion = "4.0.6"
+val springBootVersion = "4.1.0"
 val bouncyCastleVersion: String by project
 
 application {

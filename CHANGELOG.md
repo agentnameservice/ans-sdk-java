@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.8](https://github.com/agentnameservice/ans-sdk-java/compare/v0.1.7...v0.1.8) (2026-06-23)
+
+
+### Miscellaneous
+
+* **deps:** Bump actions/checkout from 6.0.2 to 7.0.0 ([#66](https://github.com/agentnameservice/ans-sdk-java/issues/66)) ([e523af5](https://github.com/agentnameservice/ans-sdk-java/commit/e523af58be6aece44271313ded9a77a9a8ecf752))
+* **deps:** Bump actions/setup-java from 5.2.0 to 5.3.0 ([#64](https://github.com/agentnameservice/ans-sdk-java/issues/64)) ([2ce5e13](https://github.com/agentnameservice/ans-sdk-java/commit/2ce5e1370c6712d7cdfe7015fe623c3110b4dcbe))
+* **deps:** Bump dnsjava:dnsjava from 3.6.4 to 3.6.5 ([#59](https://github.com/agentnameservice/ans-sdk-java/issues/59)) ([f1e7b1d](https://github.com/agentnameservice/ans-sdk-java/commit/f1e7b1da9bd53f5316d01e53794149fe5845e071))
+* **deps:** Bump gradle-wrapper from 9.5.0 to 9.6.0 ([#69](https://github.com/agentnameservice/ans-sdk-java/issues/69)) ([d7b9c52](https://github.com/agentnameservice/ans-sdk-java/commit/d7b9c52c242dae1e57fbc058414aa2fc2db3131e))
+* **deps:** Bump gradle/actions from 6.1.0 to 6.2.0 ([#65](https://github.com/agentnameservice/ans-sdk-java/issues/65)) ([349bc01](https://github.com/agentnameservice/ans-sdk-java/commit/349bc01063e689c0d05ba81fd8ee7d60ba3300e9))
+* **deps:** Bump mikepenz/action-junit-report from 6.4.0 to 6.4.2 ([#68](https://github.com/agentnameservice/ans-sdk-java/issues/68)) ([6d06362](https://github.com/agentnameservice/ans-sdk-java/commit/6d06362e779312992f5e9a6b9a94aa09b58d8905))
+* **deps:** Bump org.springframework.boot from 4.0.6 to 4.1.0 ([#67](https://github.com/agentnameservice/ans-sdk-java/issues/67)) ([d76fd35](https://github.com/agentnameservice/ans-sdk-java/commit/d76fd353c52c6cf28fb86560c27656b7ef8e2bbd))
+
 ## [0.1.7](https://github.com/godaddy/ans-sdk-java/compare/v0.1.6...v0.1.7) (2026-05-06)
 
 

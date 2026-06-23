@@ -28,7 +28,7 @@ dependencies {
     implementation("org.bouncycastle:bcprov-jdk18on:$bouncyCastleVersion")
 
     // dnsjava for DANE/TLSA DNS lookups (JNDI doesn't support TLSA)
-    implementation("dnsjava:dnsjava:3.6.4")
+    implementation("dnsjava:dnsjava:3.6.5")
 
     // Caffeine for high-performance caching with TTL and automatic eviction
     implementation("com.github.ben-manes.caffeine:caffeine:$caffeineVersion")

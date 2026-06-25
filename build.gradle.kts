@@ -57,6 +57,12 @@ subprojects {
         options.encoding = "UTF-8"
     }
 
+    // Run javadoc as part of check/build so doc errors surface locally and in CI,
+    // not only when the release job generates the javadoc jar for Maven Central.
+    tasks.named("check") {
+        dependsOn(tasks.named("javadoc"))
+    }
+
     tasks.withType<Test> {
         finalizedBy(tasks.withType<JacocoReport>())
     }

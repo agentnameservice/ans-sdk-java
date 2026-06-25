@@ -62,7 +62,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @see ScittHeaderProvider#getOutgoingHeaders()
  * @see TransparencyClient#getReceiptAsync(String)
  * @see TransparencyClient#getStatusTokenAsync(String)
- * @see ScittVerifierAdapter for client-side verification
  */
 public class ScittArtifactManager implements AutoCloseable {
 

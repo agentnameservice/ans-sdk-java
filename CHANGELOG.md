@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.9](https://github.com/agentnameservice/ans-sdk-java/compare/v0.1.8...v0.1.9) (2026-06-29)
+
+
+### Documentation
+
+* fix syntax in VerificationPolicy doc ([#71](https://github.com/agentnameservice/ans-sdk-java/issues/71)) ([a27820a](https://github.com/agentnameservice/ans-sdk-java/commit/a27820afd3952e1bbe0cb075b97451d532687bde))
+
 ## [0.1.8](https://github.com/agentnameservice/ans-sdk-java/compare/v0.1.7...v0.1.8) (2026-06-23)
 
 

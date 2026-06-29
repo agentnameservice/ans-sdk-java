@@ -24,8 +24,7 @@ import java.util.Objects;
  * ConnectOptions.builder()
  *     .verificationPolicy(VerificationPolicy.SCITT_ENHANCED)
  *     .build();
- *
- * </pre>
+ * }</pre>
  *
  * <h2>Custom Configuration</h2>
  * <p>For advanced scenarios, use the builder:</p>

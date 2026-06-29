@@ -32,7 +32,7 @@ import java.util.concurrent.TimeUnit;
  * <p>The artifact manager caches artifacts and refreshes them in the background,
  * so this filter benefits from cached values without making HTTP calls on each request.</p>
  *
- * @see ScittHeaders
+ * @see com.godaddy.ans.sdk.transparency.scitt.ScittHeaders
  * @see ScittArtifactManager
  */
 @Component

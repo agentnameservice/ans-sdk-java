@@ -95,7 +95,7 @@ public class McpClientExample {
                 HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport.builder(serverUrl)
                     .customizeClient(b -> b.sslContext(ansClient.sslContext())
                         .connectTimeout(Duration.ofSeconds(30)))
-                    .customizeRequest(b -> scittHeaders.forEach(b::header))
+                    .httpRequestCustomizer((b, method, uri, body, ctx) -> scittHeaders.forEach(b::header))
                     .build();
 
                 McpSyncClient mcpClient = McpClient.sync(transport)

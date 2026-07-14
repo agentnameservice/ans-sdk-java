@@ -345,8 +345,9 @@ public class AnsVerifiedClient implements AutoCloseable {
                 .exceptionally(e -> {
                     Throwable cause = e instanceof CompletionException && e.getCause() != null
                         ? e.getCause() : e;
-                    LOGGER.warn("SCITT preflight failed: {}", cause.getMessage());
-                    return ScittPreVerifyResult.parseError("Preflight failed: " + cause.getMessage());
+                    String detail = describe(cause);
+                    LOGGER.warn("SCITT preflight to {}:{} failed: {}", hostname, port, detail, cause);
+                    return ScittPreVerifyResult.parseError("Preflight failed: " + detail);
                 });
         } else {
             scittFuture = CompletableFuture.completedFuture(ScittPreVerifyResult.notPresent());
@@ -388,6 +389,15 @@ public class AnsVerifiedClient implements AutoCloseable {
                     }
                 });
         });
+    }
+
+    /**
+     * Renders a throwable for diagnostics. Many TLS/IO exceptions carry a null message, which
+     * would otherwise surface as "null" and hide the failing class. Falls back to the class name.
+     */
+    private static String describe(Throwable t) {
+        String message = t.getMessage();
+        return message != null ? t.getClass().getName() + ": " + message : t.getClass().getName();
     }
 
     private void assertScittResult(ScittPreVerifyResult scittPreResult, boolean scittVerified) {

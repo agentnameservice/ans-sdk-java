@@ -206,8 +206,8 @@ public final class AnsConfiguration {
          * @throws NullPointerException if required fields are not set
          */
         public AnsConfiguration build() {
-            if (this.environment == null) {
-                throw new IllegalStateException("Environment is required");
+            if (this.environment == null && this.baseUrl == null) {
+                throw new IllegalStateException("Either an environment or a base URL is required");
             }
             return new AnsConfiguration(this);
         }

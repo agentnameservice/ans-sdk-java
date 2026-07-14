@@ -115,13 +115,25 @@ class AnsConfigurationTest {
     }
 
     @Test
-    @DisplayName("Should throw when environment is not set")
-    void shouldThrowWhenEnvironmentNotSet() {
+    @DisplayName("Should throw when neither environment nor base URL is set")
+    void shouldThrowWhenEnvironmentAndBaseUrlNotSet() {
         assertThatThrownBy(() -> AnsConfiguration.builder()
             .credentialsProvider(testProvider)
             .build())
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("Environment is required");
+            .hasMessageContaining("environment or a base URL");
+    }
+
+    @Test
+    @DisplayName("Should allow custom base URL without an environment")
+    void shouldAllowBaseUrlWithoutEnvironment() {
+        AnsConfiguration config = AnsConfiguration.builder()
+            .baseUrl("http://localhost:18080")
+            .credentialsProvider(testProvider)
+            .build();
+
+        assertThat(config.getBaseUrl()).isEqualTo("http://localhost:18080");
+        assertThat(config.getEnvironment()).isNull();
     }
 
     @Test

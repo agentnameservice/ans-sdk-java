@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.10](https://github.com/agentnameservice/ans-sdk-java/compare/v0.1.9...v0.1.10) (2026-07-14)
+
+
+### Miscellaneous
+
+* **deps:** Bump actions/cache from 5.0.5 to 6.1.0 ([#77](https://github.com/agentnameservice/ans-sdk-java/issues/77)) ([69d5363](https://github.com/agentnameservice/ans-sdk-java/commit/69d5363eb1dbe77c46c48e434b74c4dc6582a0e7))
+* **deps:** Bump actions/setup-java from 5.3.0 to 5.5.0 ([#80](https://github.com/agentnameservice/ans-sdk-java/issues/80)) ([4fdcbaa](https://github.com/agentnameservice/ans-sdk-java/commit/4fdcbaa93dd63b5e4208ca6cfce017e550dbd05f))
+* **deps:** Bump com.vanniktech.maven.publish from 0.36.0 to 0.37.0 ([#74](https://github.com/agentnameservice/ans-sdk-java/issues/74)) ([cf19333](https://github.com/agentnameservice/ans-sdk-java/commit/cf1933325fe98d40be2954ee5b281578544d434f))
+* **deps:** bump mcp 1.1.2 -&gt; 2.0.0 ([#79](https://github.com/agentnameservice/ans-sdk-java/issues/79)) ([fde7b24](https://github.com/agentnameservice/ans-sdk-java/commit/fde7b24db77c8247a9423a164afa72441636ed0a))
+* **deps:** Bump org.openapi.generator from 7.22.0 to 7.23.0 ([#72](https://github.com/agentnameservice/ans-sdk-java/issues/72)) ([7db3247](https://github.com/agentnameservice/ans-sdk-java/commit/7db32472a1070b34e9427f33303b5adf86a1789e))
+
 ## [0.1.9](https://github.com/agentnameservice/ans-sdk-java/compare/v0.1.8...v0.1.9) (2026-06-29)
 
 

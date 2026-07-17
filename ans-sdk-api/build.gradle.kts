@@ -7,7 +7,7 @@ plugins {
 val jacksonVersion: String by project
 
 // Authoritative source for the API spec
-val apiSpecUrl = "https://developer.godaddy.com/swagger/swagger_ans.json"
+val apiSpecUrl = "https://classic-developer.godaddy.com/swagger/swagger_ans.json"
 val apiSpecFile = layout.buildDirectory.file("api-spec.json")
 
 dependencies {

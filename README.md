@@ -5,8 +5,8 @@ Java SDK for the Agent Name Service (ANS) Registry. This SDK provides clients fo
 ## API Specification Reference
 
 The ANS Registry SDK is based off of the REST API. The spec is documented using the OpenAPI (Swagger) specification:
-- [View OpenAPI Spec - Human Readable](https://developer.godaddy.com/doc/endpoint/ans)
-- [OpenAPI Spec - AI/Machine Readable](https://developer.godaddy.com/swagger/swagger_ans.json)
+- [View OpenAPI Spec - Human Readable](https://classic-developer.godaddy.com/doc/endpoint/ans)
+- [OpenAPI Spec - AI/Machine Readable](https://classic-developer.godaddy.com/swagger/swagger_ans.json)
 
 ## Requirements
 

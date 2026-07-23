@@ -7,8 +7,7 @@ plugins {
 val jacksonVersion: String by project
 
 // Authoritative source for the API spec
-val apiSpecUrl = "https://developer.godaddy.com/swagger/swagger_ans.json"
-val apiSpecFile = layout.buildDirectory.file("api-spec.json")
+val apiSpecFile = layout.projectDirectory.file("spec/api-spec.yaml")
 
 dependencies {
     // Jackson for JSON serialization
@@ -20,25 +19,10 @@ dependencies {
     implementation("jakarta.annotation:jakarta.annotation-api:3.0.0")
 }
 
-// Task to download the API spec from the authoritative source
-val downloadApiSpec by tasks.registering {
-    val outputFile = apiSpecFile
-    outputs.file(outputFile)
-    doLast {
-        val destFile = outputFile.get().asFile
-        destFile.parentFile.mkdirs()
-        URI.create(apiSpecUrl).toURL().openStream().use { input ->
-            destFile.outputStream().use { output ->
-                input.copyTo(output)
-            }
-        }
-        logger.lifecycle("Downloaded API spec from $apiSpecUrl")
-    }
-}
-
 openApiGenerate {
     generatorName.set("java")
-    inputSpec.set(apiSpecFile.get().asFile.absolutePath)
+    inputSpec.set(apiSpecFile)
+    skipValidateSpec.set(true)
     outputDir.set(layout.buildDirectory.dir("generated").get().asFile.absolutePath)
     apiPackage.set("com.godaddy.ans.sdk.api.generated")
     modelPackage.set("com.godaddy.ans.sdk.model.generated")
@@ -59,10 +43,6 @@ sourceSets {
             srcDir(layout.buildDirectory.dir("generated/src/main/java"))
         }
     }
-}
-
-tasks.openApiGenerate {
-    dependsOn(downloadApiSpec)
 }
 
 tasks.compileJava {

@@ -9,6 +9,7 @@ import com.godaddy.ans.sdk.model.generated.AgentRegistrationRequest;
 import com.godaddy.ans.sdk.model.generated.AgentRevocationRequest;
 import com.godaddy.ans.sdk.model.generated.AgentRevocationResponse;
 import com.godaddy.ans.sdk.model.generated.AgentStatus;
+import com.godaddy.ans.sdk.model.generated.RevocationReason;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
@@ -166,7 +167,7 @@ public final class RegistrationClient {
      * @return the revocation response
      * @see #revokeAgent(String, AgentRevocationRequest)
      */
-    public AgentRevocationResponse revokeAgent(String agentId, AgentRevocationRequest.ReasonEnum reason) {
+    public AgentRevocationResponse revokeAgent(String agentId, RevocationReason reason) {
         AgentRevocationRequest request = new AgentRevocationRequest().reason(reason);
         return revokeAgent(agentId, request);
     }
@@ -222,7 +223,7 @@ public final class RegistrationClient {
      * @return a CompletableFuture with the revocation response
      */
     public CompletableFuture<AgentRevocationResponse> revokeAgentAsync(String agentId,
-                                                                       AgentRevocationRequest.ReasonEnum reason) {
+                                                                       RevocationReason reason) {
         return CompletableFuture.supplyAsync(() -> revokeAgent(agentId, reason), AnsExecutors.sharedIoExecutor());
     }
 

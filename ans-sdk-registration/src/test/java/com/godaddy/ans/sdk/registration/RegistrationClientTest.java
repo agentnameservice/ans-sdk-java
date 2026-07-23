@@ -16,7 +16,9 @@ import com.godaddy.ans.sdk.model.generated.AgentRegistrationRequest;
 import com.godaddy.ans.sdk.model.generated.AgentRevocationRequest;
 import com.godaddy.ans.sdk.model.generated.AgentRevocationResponse;
 import com.godaddy.ans.sdk.model.generated.AgentStatus;
+import com.godaddy.ans.sdk.model.generated.Protocol;
 import com.godaddy.ans.sdk.model.generated.RegistrationPending;
+import com.godaddy.ans.sdk.model.generated.RevocationReason;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 
@@ -153,7 +155,7 @@ class RegistrationClientTest {
             .version("1.0.0")
             .agentHost("test-agent.example.com")
             .addEndpointsItem(new AgentEndpoint()
-                .protocol(AgentEndpoint.ProtocolEnum.A2_A)
+                .protocol(Protocol.A2_A)
                 .agentUrl(URI.create("https://test-agent.example.com/a2a")))
             .identityCsrPEM("-----BEGIN CERTIFICATE REQUEST-----\ntest\n-----END CERTIFICATE REQUEST-----")
             .serverCsrPEM("-----BEGIN CERTIFICATE REQUEST-----\ntest\n-----END CERTIFICATE REQUEST-----");
@@ -161,7 +163,7 @@ class RegistrationClientTest {
         AgentDetails result = client.registerAgent(request);
 
         assertThat(result).isNotNull();
-        assertThat(result.getAgentId()).isEqualTo(TEST_AGENT_ID);
+        assertThat(result.getAgentId().toString()).isEqualTo(TEST_AGENT_ID);
         assertThat(result.getAnsName()).isEqualTo("ans://v1.0.0.test-agent.example.com");
         assertThat(result.getRegistrationPending()).isNotNull();
         assertThat(result.getRegistrationPending().getStatus())
@@ -197,7 +199,7 @@ class RegistrationClientTest {
             .version("invalid")
             .agentHost("test-agent.example.com")
             .addEndpointsItem(new AgentEndpoint()
-                .protocol(AgentEndpoint.ProtocolEnum.A2_A)
+                .protocol(Protocol.A2_A)
                 .agentUrl(URI.create("https://test-agent.example.com/a2a")))
             .identityCsrPEM("test-csr")
             .serverCsrPEM("test-csr");
@@ -321,7 +323,7 @@ class RegistrationClientTest {
             .build();
 
         AgentRevocationRequest request = new AgentRevocationRequest()
-            .reason(AgentRevocationRequest.ReasonEnum.CESSATION_OF_OPERATION)
+            .reason(RevocationReason.CESSATION_OF_OPERATION)
             .comments("Agent being decommissioned");
 
         AgentRevocationResponse result = client.revokeAgent(TEST_AGENT_ID, request);
@@ -329,7 +331,7 @@ class RegistrationClientTest {
         assertThat(result).isNotNull();
         assertThat(result.getAgentId()).hasToString(TEST_AGENT_ID);
         assertThat(result.getStatus()).isEqualTo(AgentLifecycleStatus.REVOKED);
-        assertThat(result.getReason()).isEqualTo(AgentRevocationResponse.ReasonEnum.CESSATION_OF_OPERATION);
+        assertThat(result.getReason()).isEqualTo(RevocationReason.CESSATION_OF_OPERATION);
         assertThat(result.getDnsRecordsToRemove()).hasSize(3);
 
         verify(postRequestedFor(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/revoke"))
@@ -356,7 +358,7 @@ class RegistrationClientTest {
             .build();
 
         AgentRevocationResponse result = client.revokeAgent(TEST_AGENT_ID,
-                AgentRevocationRequest.ReasonEnum.KEY_COMPROMISE);
+                RevocationReason.KEY_COMPROMISE);
 
         assertThat(result).isNotNull();
         assertThat(result.getStatus()).isEqualTo(AgentLifecycleStatus.REVOKED);
@@ -383,7 +385,7 @@ class RegistrationClientTest {
             .build();
 
         assertThatThrownBy(() -> client.revokeAgent(TEST_AGENT_ID,
-                AgentRevocationRequest.ReasonEnum.CESSATION_OF_OPERATION))
+                RevocationReason.CESSATION_OF_OPERATION))
             .isInstanceOf(AnsNotFoundException.class)
             .hasMessageContaining("not found");
     }
@@ -407,7 +409,7 @@ class RegistrationClientTest {
             .build();
 
         assertThatThrownBy(() -> client.revokeAgent(TEST_AGENT_ID,
-                AgentRevocationRequest.ReasonEnum.CESSATION_OF_OPERATION))
+                RevocationReason.CESSATION_OF_OPERATION))
             .isInstanceOf(AnsValidationException.class)
             .hasMessageContaining("Validation error");
     }
@@ -431,7 +433,7 @@ class RegistrationClientTest {
             .build();
 
         assertThatThrownBy(() -> client.revokeAgent(TEST_AGENT_ID,
-                AgentRevocationRequest.ReasonEnum.CESSATION_OF_OPERATION))
+                RevocationReason.CESSATION_OF_OPERATION))
             .isInstanceOf(AnsValidationException.class)
             .hasMessageContaining("Validation error");
     }
@@ -458,7 +460,7 @@ class RegistrationClientTest {
         AgentDetails result = client.getAgent(TEST_AGENT_ID);
 
         assertThat(result).isNotNull();
-        assertThat(result.getAgentId()).isEqualTo(TEST_AGENT_ID);
+        assertThat(result.getAgentId().toString()).isEqualTo(TEST_AGENT_ID);
         assertThat(result.getAnsName()).isEqualTo("ans://v1.0.0.test-agent.example.com");
     }
 
@@ -514,7 +516,7 @@ class RegistrationClientTest {
             .version("1.0.0")
             .agentHost("test-agent.example.com")
             .addEndpointsItem(new AgentEndpoint()
-                .protocol(AgentEndpoint.ProtocolEnum.A2_A)
+                .protocol(Protocol.A2_A)
                 .agentUrl(URI.create("https://test-agent.example.com/a2a")))
             .identityCsrPEM("test-csr")
             .serverCsrPEM("test-csr");
@@ -522,7 +524,7 @@ class RegistrationClientTest {
         AgentDetails result = client.registerAgentAsync(request).get();
 
         assertThat(result).isNotNull();
-        assertThat(result.getAgentId()).isEqualTo(TEST_AGENT_ID);
+        assertThat(result.getAgentId().toString()).isEqualTo(TEST_AGENT_ID);
     }
 
     @Test
@@ -589,7 +591,7 @@ class RegistrationClientTest {
             .build();
 
         AgentRevocationRequest request = new AgentRevocationRequest()
-            .reason(AgentRevocationRequest.ReasonEnum.CESSATION_OF_OPERATION);
+            .reason(RevocationReason.CESSATION_OF_OPERATION);
 
         AgentRevocationResponse result = client.revokeAgentAsync(TEST_AGENT_ID, request).get();
 
@@ -615,7 +617,7 @@ class RegistrationClientTest {
             .build();
 
         AgentRevocationResponse result = client.revokeAgentAsync(TEST_AGENT_ID,
-                AgentRevocationRequest.ReasonEnum.KEY_COMPROMISE).get();
+                RevocationReason.KEY_COMPROMISE).get();
 
         assertThat(result).isNotNull();
         assertThat(result.getStatus()).isEqualTo(AgentLifecycleStatus.REVOKED);
@@ -645,7 +647,7 @@ class RegistrationClientTest {
             .version("1.0.0")
             .agentHost("test-agent.example.com")
             .addEndpointsItem(new AgentEndpoint()
-                .protocol(AgentEndpoint.ProtocolEnum.A2_A)
+                .protocol(Protocol.A2_A)
                 .agentUrl(URI.create("https://test-agent.example.com/a2a")))
             .identityCsrPEM("test-csr")
             .serverCsrPEM("test-csr");
@@ -699,7 +701,7 @@ class RegistrationClientTest {
             .version("1.0.0")
             .agentHost("test-agent.example.com")
             .addEndpointsItem(new AgentEndpoint()
-                .protocol(AgentEndpoint.ProtocolEnum.A2_A)
+                .protocol(Protocol.A2_A)
                 .agentUrl(URI.create("https://test-agent.example.com/a2a")))
             .identityCsrPEM("test-csr")
             .serverCsrPEM("test-csr");
@@ -731,7 +733,7 @@ class RegistrationClientTest {
             .version("1.0.0")
             .agentHost("test-agent.example.com")
             .addEndpointsItem(new AgentEndpoint()
-                .protocol(AgentEndpoint.ProtocolEnum.A2_A)
+                .protocol(Protocol.A2_A)
                 .agentUrl(URI.create("https://test-agent.example.com/a2a")))
             .identityCsrPEM("test-csr")
             .serverCsrPEM("test-csr");

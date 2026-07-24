@@ -7,26 +7,5 @@ package com.godaddy.ans.sdk.discovery;
  * v1-only endpoint, so this local DTO fills in for the removed
  * {@code AgentCapabilityRequest} model.</p>
  */
-final class AgentCapabilityRequest {
-
-    private String agentHost;
-    private String version;
-
-    AgentCapabilityRequest agentHost(String agentHost) {
-        this.agentHost = agentHost;
-        return this;
-    }
-
-    AgentCapabilityRequest version(String version) {
-        this.version = version;
-        return this;
-    }
-
-    public String getAgentHost() {
-        return agentHost;
-    }
-
-    public String getVersion() {
-        return version;
-    }
+record AgentCapabilityRequest(String agentHost, String version) {
 }

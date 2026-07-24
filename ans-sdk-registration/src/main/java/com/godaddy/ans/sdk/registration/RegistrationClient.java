@@ -3,6 +3,7 @@ package com.godaddy.ans.sdk.registration;
 import com.godaddy.ans.sdk.auth.AnsCredentialsProvider;
 import com.godaddy.ans.sdk.concurrent.AnsExecutors;
 import com.godaddy.ans.sdk.config.AnsConfiguration;
+import com.godaddy.ans.sdk.config.ApiVersion;
 import com.godaddy.ans.sdk.config.Environment;
 import com.godaddy.ans.sdk.model.generated.AgentDetails;
 import com.godaddy.ans.sdk.model.generated.AgentRegistrationRequest;
@@ -55,11 +56,10 @@ public final class RegistrationClient {
     private final RegistrationService registrationService;
     private final CertificateService certificateService;
 
-    private RegistrationClient(AnsConfiguration configuration) {
+    private RegistrationClient(AnsConfiguration configuration, AnsApiClient ansApiClient) {
         this.configuration = configuration;
-        var ansClient = new AnsApiClient(configuration);
-        this.registrationService = new RegistrationService(ansClient);
-        this.certificateService = new CertificateService(configuration);
+        this.registrationService = new RegistrationService(ansApiClient);
+        this.certificateService = new CertificateService(ansApiClient);
     }
 
     /**
@@ -339,6 +339,17 @@ public final class RegistrationClient {
         }
 
         /**
+         * Sets the API version lane. Defaults to {@link ApiVersion#V2}.
+         *
+         * @param apiVersion the API version
+         * @return this builder
+         */
+        public Builder apiVersion(ApiVersion apiVersion) {
+            configBuilder.apiVersion(apiVersion);
+            return this;
+        }
+
+        /**
          * Builds the RegistrationClient.
          *
          * @return a new RegistrationClient instance
@@ -347,7 +358,7 @@ public final class RegistrationClient {
             AnsConfiguration config = (prebuiltConfiguration != null)
                 ? prebuiltConfiguration
                 : configBuilder.build();
-            return new RegistrationClient(config);
+            return new RegistrationClient(config, new AnsApiClient(config));
         }
     }
 }

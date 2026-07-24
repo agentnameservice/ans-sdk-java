@@ -32,6 +32,7 @@ public final class AnsConfiguration {
     private final Duration connectTimeout;
     private final Duration readTimeout;
     private final int maxRetries;
+    private final ApiVersion apiVersion;
 
     private AnsConfiguration(Builder builder) {
         this.environment = builder.environment;
@@ -41,6 +42,7 @@ public final class AnsConfiguration {
         this.connectTimeout = builder.connectTimeout != null ? builder.connectTimeout : DEFAULT_CONNECT_TIMEOUT;
         this.readTimeout = builder.readTimeout != null ? builder.readTimeout : DEFAULT_READ_TIMEOUT;
         this.maxRetries = builder.maxRetries;
+        this.apiVersion = Objects.requireNonNull(builder.apiVersion, "Api version is required");
     }
 
     /**
@@ -116,6 +118,15 @@ public final class AnsConfiguration {
     }
 
     /**
+     * Returns the selected API version lane.
+     *
+     * @return the API version (defaults to {@link ApiVersion#V2})
+     */
+    public ApiVersion getApiVersion() {
+        return apiVersion;
+    }
+
+    /**
      * Builder for {@link AnsConfiguration}.
      */
     public static final class Builder {
@@ -126,6 +137,7 @@ public final class AnsConfiguration {
         private Duration connectTimeout;
         private Duration readTimeout;
         private int maxRetries = DEFAULT_MAX_RETRIES;
+        private ApiVersion apiVersion = ApiVersion.V2;
 
         private Builder() {
         }
@@ -200,14 +212,25 @@ public final class AnsConfiguration {
         }
 
         /**
+         * Sets the API version lane. Defaults to {@link ApiVersion#V2}.
+         *
+         * @param apiVersion the API version
+         * @return this builder
+         */
+        public Builder apiVersion(ApiVersion apiVersion) {
+            this.apiVersion = Objects.requireNonNull(apiVersion, "API version cannot be null");
+            return this;
+        }
+
+        /**
          * Builds the configuration.
          *
          * @return the configuration instance
          * @throws NullPointerException if required fields are not set
          */
         public AnsConfiguration build() {
-            if (this.environment == null) {
-                throw new IllegalStateException("Environment is required");
+            if (this.environment == null && this.baseUrl == null) {
+                throw new IllegalStateException("Either an environment or a base URL is required");
             }
             return new AnsConfiguration(this);
         }

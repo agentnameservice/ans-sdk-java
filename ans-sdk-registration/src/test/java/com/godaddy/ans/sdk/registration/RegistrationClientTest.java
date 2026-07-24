@@ -3,6 +3,7 @@ package com.godaddy.ans.sdk.registration;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import com.godaddy.ans.sdk.auth.JwtCredentialsProvider;
+import com.godaddy.ans.sdk.config.ApiVersion;
 import com.godaddy.ans.sdk.config.Environment;
 import com.godaddy.ans.sdk.exception.AnsAuthenticationException;
 import com.godaddy.ans.sdk.exception.AnsConflictException;
@@ -131,14 +132,14 @@ class RegistrationClientTest {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
         // Stub the initial registration POST
-        stubFor(post(urlEqualTo("/v1/agents/register"))
+        stubFor(post(urlEqualTo("/v2/ans/agents"))
             .willReturn(aResponse()
                 .withStatus(202)
                 .withHeader("Content-Type", "application/json")
                 .withBody(registrationPendingResponse())));
 
         // Stub the follow-up GET for AgentDetails
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
@@ -171,8 +172,11 @@ class RegistrationClientTest {
         assertThat(result.getRegistrationPending().getChallenges()).hasSize(1);
         assertThat(result.getRegistrationPending().getNextSteps()).hasSize(1);
 
-        verify(postRequestedFor(urlEqualTo("/v1/agents/register"))
+        verify(postRequestedFor(urlEqualTo("/v2/ans/agents"))
             .withRequestBody(containing("\"agentDisplayName\":\"Test Agent\""))
+            // discoveryProfiles is v2-only and defaults to [ANS_DNSAID] on the wire
+            .withRequestBody(containing("\"discoveryProfiles\""))
+            .withRequestBody(containing("ANS_DNSAID"))
             .withHeader("Authorization", equalTo("sso-jwt " + TEST_JWT_TOKEN)));
     }
 
@@ -181,7 +185,7 @@ class RegistrationClientTest {
     void shouldThrowValidationExceptionOn422(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/register"))
+        stubFor(post(urlEqualTo("/v2/ans/agents"))
             .willReturn(aResponse()
                 .withStatus(422)
                 .withHeader("Content-Type", "application/json")
@@ -216,7 +220,7 @@ class RegistrationClientTest {
     void shouldVerifyAcmeSuccessfully(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/verify-acme"))
+        stubFor(post(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/verify-acme"))
             .willReturn(aResponse()
                 .withStatus(202)
                 .withHeader("Content-Type", "application/json")
@@ -239,7 +243,7 @@ class RegistrationClientTest {
     void shouldThrowNotFoundExceptionForVerifyAcme(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/verify-acme"))
+        stubFor(post(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/verify-acme"))
             .willReturn(aResponse()
                 .withStatus(404)
                 .withHeader("Content-Type", "application/json")
@@ -263,7 +267,7 @@ class RegistrationClientTest {
     void shouldVerifyDnsSuccessfully(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/verify-dns"))
+        stubFor(post(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/verify-dns"))
             .willReturn(aResponse()
                 .withStatus(202)
                 .withHeader("Content-Type", "application/json")
@@ -286,7 +290,7 @@ class RegistrationClientTest {
     void shouldThrowAuthExceptionForVerifyDns(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/verify-dns"))
+        stubFor(post(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/verify-dns"))
             .willReturn(aResponse()
                 .withStatus(401)
                 .withHeader("Content-Type", "application/json")
@@ -310,7 +314,7 @@ class RegistrationClientTest {
     void shouldRevokeAgentSuccessfully(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/revoke"))
+        stubFor(post(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/revoke"))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
@@ -334,7 +338,7 @@ class RegistrationClientTest {
         assertThat(result.getReason()).isEqualTo(RevocationReason.CESSATION_OF_OPERATION);
         assertThat(result.getDnsRecordsToRemove()).hasSize(3);
 
-        verify(postRequestedFor(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/revoke"))
+        verify(postRequestedFor(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/revoke"))
             .withRequestBody(containing("\"reason\":\"CESSATION_OF_OPERATION\""))
             .withRequestBody(containing("\"comments\":\"Agent being decommissioned\""))
             .withHeader("Authorization", equalTo("sso-jwt " + TEST_JWT_TOKEN)));
@@ -345,7 +349,7 @@ class RegistrationClientTest {
     void shouldRevokeAgentWithJustReason(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/revoke"))
+        stubFor(post(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/revoke"))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
@@ -363,7 +367,7 @@ class RegistrationClientTest {
         assertThat(result).isNotNull();
         assertThat(result.getStatus()).isEqualTo(AgentLifecycleStatus.REVOKED);
 
-        verify(postRequestedFor(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/revoke"))
+        verify(postRequestedFor(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/revoke"))
             .withRequestBody(containing("\"reason\":\"KEY_COMPROMISE\"")));
     }
 
@@ -372,7 +376,7 @@ class RegistrationClientTest {
     void shouldThrowNotFoundExceptionForRevoke(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/revoke"))
+        stubFor(post(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/revoke"))
             .willReturn(aResponse()
                 .withStatus(404)
                 .withHeader("Content-Type", "application/json")
@@ -395,7 +399,7 @@ class RegistrationClientTest {
     void shouldThrowValidationExceptionWhenAlreadyRevoked(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/revoke"))
+        stubFor(post(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/revoke"))
             .willReturn(aResponse()
                 .withStatus(422)
                 .withHeader("Content-Type", "application/json")
@@ -419,7 +423,7 @@ class RegistrationClientTest {
     void shouldThrowValidationExceptionForPendingValidation(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/revoke"))
+        stubFor(post(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/revoke"))
             .willReturn(aResponse()
                 .withStatus(422)
                 .withHeader("Content-Type", "application/json")
@@ -445,7 +449,7 @@ class RegistrationClientTest {
     void shouldGetAgentByIdSuccessfully(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
@@ -469,7 +473,7 @@ class RegistrationClientTest {
     void shouldThrowNotFoundExceptionWhenAgentNotFound(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID))
             .willReturn(aResponse()
                 .withStatus(404)
                 .withHeader("Content-Type", "application/json")
@@ -493,13 +497,13 @@ class RegistrationClientTest {
     void shouldRegisterAgentAsync(WireMockRuntimeInfo wmRuntimeInfo) throws Exception {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/register"))
+        stubFor(post(urlEqualTo("/v2/ans/agents"))
             .willReturn(aResponse()
                 .withStatus(202)
                 .withHeader("Content-Type", "application/json")
                 .withBody(registrationPendingResponse())));
 
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
@@ -532,7 +536,7 @@ class RegistrationClientTest {
     void shouldVerifyAcmeAsync(WireMockRuntimeInfo wmRuntimeInfo) throws Exception {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/verify-acme"))
+        stubFor(post(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/verify-acme"))
             .willReturn(aResponse()
                 .withStatus(202)
                 .withHeader("Content-Type", "application/json")
@@ -555,7 +559,7 @@ class RegistrationClientTest {
     void shouldVerifyDnsAsync(WireMockRuntimeInfo wmRuntimeInfo) throws Exception {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/verify-dns"))
+        stubFor(post(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/verify-dns"))
             .willReturn(aResponse()
                 .withStatus(202)
                 .withHeader("Content-Type", "application/json")
@@ -578,7 +582,7 @@ class RegistrationClientTest {
     void shouldRevokeAgentAsyncWithRequest(WireMockRuntimeInfo wmRuntimeInfo) throws Exception {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/revoke"))
+        stubFor(post(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/revoke"))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
@@ -604,7 +608,7 @@ class RegistrationClientTest {
     void shouldRevokeAgentAsyncWithReason(WireMockRuntimeInfo wmRuntimeInfo) throws Exception {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/revoke"))
+        stubFor(post(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/revoke"))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
@@ -630,7 +634,7 @@ class RegistrationClientTest {
     void shouldThrowConflictExceptionOn409(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(post(urlEqualTo("/v1/agents/register"))
+        stubFor(post(urlEqualTo("/v2/ans/agents"))
             .willReturn(aResponse()
                 .withStatus(409)
                 .withHeader("Content-Type", "application/json")
@@ -662,7 +666,7 @@ class RegistrationClientTest {
     void shouldThrowServerExceptionOnUnexpectedStatusCode(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID))
             .willReturn(aResponse()
                 .withStatus(418)
                 .withHeader("Content-Type", "application/json")
@@ -693,6 +697,7 @@ class RegistrationClientTest {
         RegistrationClient client = RegistrationClient.builder()
             .environment(Environment.OTE)
             .baseUrl(baseUrl)
+            .apiVersion(ApiVersion.V1)
             .credentialsProvider(new JwtCredentialsProvider(TEST_JWT_TOKEN))
             .build();
 
@@ -725,6 +730,7 @@ class RegistrationClientTest {
         RegistrationClient client = RegistrationClient.builder()
             .environment(Environment.OTE)
             .baseUrl(baseUrl)
+            .apiVersion(ApiVersion.V1)
             .credentialsProvider(new JwtCredentialsProvider(TEST_JWT_TOKEN))
             .build();
 
@@ -743,11 +749,45 @@ class RegistrationClientTest {
             .hasMessageContaining("missing 'self' link");
     }
 
+    @Test
+    @DisplayName("Should throw AnsServerException when v2 registration response has no agentId")
+    void shouldThrowWhenV2RegistrationMissingAgentId(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        // v2 resolves via agentId, not the self link; a response without it is a server error.
+        stubFor(post(urlEqualTo("/v2/ans/agents"))
+            .willReturn(aResponse()
+                .withStatus(202)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"status\":\"PENDING_VALIDATION\"}")));
+
+        RegistrationClient client = RegistrationClient.builder()
+            .environment(Environment.OTE)
+            .baseUrl(baseUrl)
+            .credentialsProvider(new JwtCredentialsProvider(TEST_JWT_TOKEN))
+            .build();
+
+        AgentRegistrationRequest request = new AgentRegistrationRequest()
+            .agentDisplayName("Test Agent")
+            .version("1.0.0")
+            .agentHost("test-agent.example.com")
+            .addEndpointsItem(new AgentEndpoint()
+                .protocol(Protocol.A2_A)
+                .agentUrl(URI.create("https://test-agent.example.com/a2a")))
+            .identityCsrPEM("test-csr")
+            .serverCsrPEM("test-csr");
+
+        assertThatThrownBy(() -> client.registerAgent(request))
+            .isInstanceOf(AnsServerException.class)
+            .hasMessageContaining("missing 'agentId'");
+    }
+
     // ==================== Helper Methods ====================
 
     private String registrationPendingResponse() {
         return """
             {
+                "agentId": "550e8400-e29b-41d4-a716-446655440000",
                 "status": "PENDING_VALIDATION",
                 "ansName": "ans://v1.0.0.test-agent.example.com",
                 "nextSteps": [

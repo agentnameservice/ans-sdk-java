@@ -1,7 +1,7 @@
 package com.godaddy.ans.sdk.registration;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.godaddy.ans.sdk.config.AnsConfiguration;
+import com.godaddy.ans.sdk.config.ApiVersion;
 import com.godaddy.ans.sdk.exception.AnsAuthenticationException;
 import com.godaddy.ans.sdk.exception.AnsNotFoundException;
 import com.godaddy.ans.sdk.exception.AnsServerException;
@@ -34,9 +34,11 @@ import java.util.List;
 public class CertificateService {
 
     private final AnsApiClient httpClient;
+    private final ApiVersion apiVersion;
 
-    CertificateService(AnsConfiguration configuration) {
-        this.httpClient = new AnsApiClient(configuration);
+    CertificateService(AnsApiClient ansApiClient) {
+        this.httpClient = ansApiClient;
+        this.apiVersion = ansApiClient.getApiVersion();
     }
 
     /**
@@ -55,7 +57,8 @@ public class CertificateService {
     public List<CertificateResponse> getIdentityCertificates(String agentId) {
         validateAgentId(agentId);
 
-        HttpRequest request = httpClient.createRequestBuilder("/v1/agents/" + agentId + "/certificates/identity")
+        HttpRequest request = httpClient.createRequestBuilder(
+                AgentPaths.agentPath(apiVersion, agentId, "certificates", "identity"))
             .GET()
             .build();
 
@@ -79,7 +82,8 @@ public class CertificateService {
     public List<CertificateResponse> getServerCertificates(String agentId) {
         validateAgentId(agentId);
 
-        HttpRequest request = httpClient.createRequestBuilder("/v1/agents/" + agentId + "/certificates/server")
+        HttpRequest request = httpClient.createRequestBuilder(
+                AgentPaths.agentPath(apiVersion, agentId, "certificates", "server"))
             .GET()
             .build();
 

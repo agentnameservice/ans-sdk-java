@@ -5,6 +5,7 @@ import com.godaddy.ans.sdk.agent.http.AnsHttpClient;
 import com.godaddy.ans.sdk.agent.protocol.HttpApiClient;
 import com.godaddy.ans.sdk.model.generated.AgentDetails;
 import com.godaddy.ans.sdk.model.generated.AgentEndpoint;
+import com.godaddy.ans.sdk.model.generated.Protocol;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -178,13 +179,14 @@ public final class AgentConnection {
     /**
      * Checks if a Protocol enum matches the protocol string.
      */
-    private boolean matchesProtocol(AgentEndpoint.ProtocolEnum endpointProtocol, String protocolStr) {
+    private boolean matchesProtocol(Protocol endpointProtocol, String protocolStr) {
         if (endpointProtocol == null || protocolStr == null) {
             return false;
         }
-        // Handle both enum name (HTTP_API) and value (HTTP-API)
-        return protocolStr.equals(endpointProtocol.name())
-            || protocolStr.equals(endpointProtocol.getValue());
+        // Normalize hyphens to underscores so "HTTP-API" form matches HTTP_API
+        String normalized = protocolStr.replace('-', '_');
+        return normalized.equals(endpointProtocol.name())
+            || normalized.equals(endpointProtocol.getValue());
     }
 
     /**

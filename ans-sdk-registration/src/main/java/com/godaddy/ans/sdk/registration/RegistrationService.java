@@ -1,5 +1,6 @@
 package com.godaddy.ans.sdk.registration;
 
+import com.godaddy.ans.sdk.config.ApiVersion;
 import com.godaddy.ans.sdk.exception.AnsServerException;
 import com.godaddy.ans.sdk.model.generated.AgentDetails;
 import com.godaddy.ans.sdk.model.generated.AgentRegistrationRequest;
@@ -11,6 +12,7 @@ import com.godaddy.ans.sdk.model.generated.RegistrationPending;
 
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.UUID;
 
 /**
  * Internal service for handling registration API calls.
@@ -18,33 +20,55 @@ import java.net.http.HttpResponse;
 class RegistrationService {
 
     private final AnsApiClient httpClient;
+    private final ApiVersion apiVersion;
 
     RegistrationService(final AnsApiClient ansApiClient) {
         this.httpClient = ansApiClient;
+        this.apiVersion = ansApiClient.getApiVersion();
     }
+
     /**
      * Registers a new agent and returns full agent details.
      *
-     * <p>This method registers the agent and then follows the 'self' link
-     * to retrieve the complete AgentDetails including the agentId.</p>
+     * <p>On the v2 lane the {@code agentId} returned in the registration response
+     * is used directly to fetch the complete {@link AgentDetails}. On the v1 lane
+     * the 'self' link is followed instead (HATEOAS).</p>
      */
     AgentDetails register(AgentRegistrationRequest request) {
-        String requestBody = httpClient.serializeToJson(request);
+        // discoveryProfiles is a v2-only field; strip it from the wire body on v1.
+        String requestBody = (apiVersion == ApiVersion.V1)
+            ? httpClient.serializeToJsonWithoutField(request, "discoveryProfiles")
+            : httpClient.serializeToJson(request);
 
-        HttpRequest httpRequest = httpClient.createRequestBuilder("/v1/agents/register")
+        HttpRequest httpRequest = httpClient.createRequestBuilder(AgentPaths.registerPath(apiVersion))
             .POST(HttpRequest.BodyPublishers.ofString(requestBody))
             .build();
 
         HttpResponse<String> response = httpClient.sendRequest(httpRequest);
         RegistrationPending pending = httpClient.parseResponse(response.body(), RegistrationPending.class);
 
-        // Follow the 'self' link to get full AgentDetails with agentId
-        String selfPath = extractSelfLink(pending);
-        if (selfPath == null) {
-            throw new AnsServerException("Registration response missing 'self' link", 0, null);
+        return getAgentDetails(resolveAgentDetailsPath(pending));
+    }
+
+    /**
+     * Resolves the path to fetch full agent details after registration.
+     *
+     * <p>v2 uses {@code pending.getAgentId()} directly; v1 follows the 'self' link.</p>
+     */
+    private String resolveAgentDetailsPath(RegistrationPending pending) {
+        if (apiVersion == ApiVersion.V1) {
+            String selfPath = extractSelfLink(pending);
+            if (selfPath == null) {
+                throw new AnsServerException("Registration response missing 'self' link", 0, null);
+            }
+            return selfPath;
         }
 
-        return getAgentDetails(selfPath);
+        UUID agentId = pending.getAgentId();
+        if (agentId == null) {
+            throw new AnsServerException("Registration response missing 'agentId'", 0, null);
+        }
+        return AgentPaths.agentPath(apiVersion, agentId.toString());
     }
 
     /**
@@ -63,14 +87,15 @@ class RegistrationService {
      * Gets agent details by agent ID.
      */
     AgentDetails getAgent(String agentId) {
-        return getAgentDetails("/v1/agents/" + agentId);
+        return getAgentDetails(AgentPaths.agentPath(apiVersion, agentId));
     }
 
     /**
      * Triggers ACME verification.
      */
     AgentStatus verifyAcme(String agentId) {
-        HttpRequest request = httpClient.createRequestBuilder("/v1/agents/" + agentId + "/verify-acme")
+        HttpRequest request = httpClient.createRequestBuilder(
+                AgentPaths.agentPath(apiVersion, agentId, "verify-acme"))
             .POST(HttpRequest.BodyPublishers.noBody())
             .build();
 
@@ -82,7 +107,8 @@ class RegistrationService {
      * Triggers DNS verification.
      */
     AgentStatus verifyDns(String agentId) {
-        HttpRequest request = httpClient.createRequestBuilder("/v1/agents/" + agentId + "/verify-dns")
+        HttpRequest request = httpClient.createRequestBuilder(
+                AgentPaths.agentPath(apiVersion, agentId, "verify-dns"))
             .POST(HttpRequest.BodyPublishers.noBody())
             .build();
 
@@ -104,7 +130,8 @@ class RegistrationService {
     AgentRevocationResponse revoke(String agentId, AgentRevocationRequest request) {
         String requestBody = httpClient.serializeToJson(request);
 
-        HttpRequest httpRequest = httpClient.createRequestBuilder("/v1/agents/" + agentId + "/revoke")
+        HttpRequest httpRequest = httpClient.createRequestBuilder(
+                AgentPaths.agentPath(apiVersion, agentId, "revoke"))
             .POST(HttpRequest.BodyPublishers.ofString(requestBody))
             .build();
 

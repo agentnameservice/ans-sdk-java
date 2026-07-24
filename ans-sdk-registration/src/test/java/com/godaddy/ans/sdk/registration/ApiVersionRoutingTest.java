@@ -5,6 +5,11 @@ import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import com.godaddy.ans.sdk.auth.JwtCredentialsProvider;
 import com.godaddy.ans.sdk.config.ApiVersion;
 import com.godaddy.ans.sdk.config.Environment;
+import com.godaddy.ans.sdk.exception.AnsAuthenticationException;
+import com.godaddy.ans.sdk.exception.AnsConflictException;
+import com.godaddy.ans.sdk.exception.AnsNotFoundException;
+import com.godaddy.ans.sdk.exception.AnsServerException;
+import com.godaddy.ans.sdk.exception.AnsValidationException;
 import com.godaddy.ans.sdk.model.generated.AgentEndpoint;
 import com.godaddy.ans.sdk.model.generated.AgentRegistrationRequest;
 import com.godaddy.ans.sdk.model.generated.AgentRevocationRequest;
@@ -26,6 +31,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.verify;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Verifies API-version path routing across the v1 and v2 lanes.
@@ -104,6 +110,18 @@ class ApiVersionRoutingTest {
     }
 
     @Test
+    @DisplayName("v1 register throws when self link href is null")
+    void shouldThrowWhenSelfLinkHrefIsNull(WireMockRuntimeInfo wm) {
+        stubFor(post(urlEqualTo("/v1/agents/register"))
+            .willReturn(aResponse().withStatus(202).withBody("""
+                {"status":"PENDING_VALIDATION","links":[{"rel":"self","href":null}]}
+                """)));
+
+        assertThatThrownBy(() -> v1Client(wm).registerAgent(sampleRequest()))
+            .isInstanceOf(AnsServerException.class);
+    }
+
+    @Test
     @DisplayName("v1 getAgent targets /v1/agents/{agentId}")
     void v1GetAgentPath(WireMockRuntimeInfo wm) {
         stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID))
@@ -154,7 +172,184 @@ class ApiVersionRoutingTest {
         assertThat(v1Client(wm).revokeAgent(TEST_AGENT_ID, request)).isNotNull();
     }
 
+    // ==================== V1 error paths ====================
+    //
+    // V1 and V2 share AnsApiClient.handleErrorResponse, but nothing pins the
+    // V1 lane to the correct exception type per status code. These tests do:
+    // 401/403 -> AnsAuthenticationException, 404 -> AnsNotFoundException,
+    // 409 -> AnsConflictException, 422 -> AnsValidationException,
+    // >=500 -> AnsServerException.
+
+    @Test
+    @DisplayName("v1 register maps 409 to AnsConflictException")
+    void v1RegisterConflict(WireMockRuntimeInfo wm) {
+        stubFor(post(urlEqualTo("/v1/agents/register"))
+            .willReturn(errorResponse(409, "ALREADY_EXISTS", "Agent already registered")));
+
+        assertThatThrownBy(() -> v1Client(wm).registerAgent(sampleRequest()))
+            .isInstanceOf(AnsConflictException.class)
+            .hasMessageContaining("Conflict");
+    }
+
+    @Test
+    @DisplayName("v1 register maps 422 to AnsValidationException")
+    void v1RegisterValidation(WireMockRuntimeInfo wm) {
+        stubFor(post(urlEqualTo("/v1/agents/register"))
+            .willReturn(errorResponse(422, "INVALID_ARGUMENT", "Invalid version format")));
+
+        assertThatThrownBy(() -> v1Client(wm).registerAgent(sampleRequest()))
+            .isInstanceOf(AnsValidationException.class)
+            .hasMessageContaining("Validation error");
+    }
+
+    @Test
+    @DisplayName("v1 register maps 401 to AnsAuthenticationException")
+    void v1RegisterAuth(WireMockRuntimeInfo wm) {
+        stubFor(post(urlEqualTo("/v1/agents/register"))
+            .willReturn(errorResponse(401, "UNAUTHORIZED", "Invalid token")));
+
+        assertThatThrownBy(() -> v1Client(wm).registerAgent(sampleRequest()))
+            .isInstanceOf(AnsAuthenticationException.class)
+            .hasMessageContaining("Authentication failed");
+    }
+
+    @Test
+    @DisplayName("v1 register maps 500 to AnsServerException carrying the status code")
+    void v1RegisterServerError(WireMockRuntimeInfo wm) {
+        stubFor(post(urlEqualTo("/v1/agents/register"))
+            .willReturn(errorResponse(500, "INTERNAL", "Boom")));
+
+        assertThatThrownBy(() -> v1Client(wm).registerAgent(sampleRequest()))
+            .isInstanceOfSatisfying(AnsServerException.class,
+                ex -> assertThat(ex.getStatusCode()).isEqualTo(500))
+            .hasMessageContaining("Server error");
+    }
+
+    @Test
+    @DisplayName("v1 getAgent maps 404 to AnsNotFoundException")
+    void v1GetAgentNotFound(WireMockRuntimeInfo wm) {
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID))
+            .willReturn(errorResponse(404, "NOT_FOUND", "Agent not found")));
+
+        assertThatThrownBy(() -> v1Client(wm).getAgent(TEST_AGENT_ID))
+            .isInstanceOf(AnsNotFoundException.class)
+            .hasMessageContaining("not found");
+    }
+
+    @Test
+    @DisplayName("v1 getAgent maps 401 to AnsAuthenticationException")
+    void v1GetAgentAuth(WireMockRuntimeInfo wm) {
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID))
+            .willReturn(errorResponse(401, "UNAUTHORIZED", "Invalid token")));
+
+        assertThatThrownBy(() -> v1Client(wm).getAgent(TEST_AGENT_ID))
+            .isInstanceOf(AnsAuthenticationException.class)
+            .hasMessageContaining("Authentication failed");
+    }
+
+    @Test
+    @DisplayName("v1 verifyAcme maps 404 to AnsNotFoundException")
+    void v1VerifyAcmeNotFound(WireMockRuntimeInfo wm) {
+        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/verify-acme"))
+            .willReturn(errorResponse(404, "NOT_FOUND", "Agent not found")));
+
+        assertThatThrownBy(() -> v1Client(wm).verifyAcme(TEST_AGENT_ID))
+            .isInstanceOf(AnsNotFoundException.class)
+            .hasMessageContaining("not found");
+    }
+
+    @Test
+    @DisplayName("v1 verifyAcme maps 401 to AnsAuthenticationException")
+    void v1VerifyAcmeAuth(WireMockRuntimeInfo wm) {
+        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/verify-acme"))
+            .willReturn(errorResponse(401, "UNAUTHORIZED", "Invalid token")));
+
+        assertThatThrownBy(() -> v1Client(wm).verifyAcme(TEST_AGENT_ID))
+            .isInstanceOf(AnsAuthenticationException.class)
+            .hasMessageContaining("Authentication failed");
+    }
+
+    @Test
+    @DisplayName("v1 verifyAcme maps 422 to AnsValidationException")
+    void v1VerifyAcmeValidation(WireMockRuntimeInfo wm) {
+        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/verify-acme"))
+            .willReturn(errorResponse(422, "INVALID_STATE", "Order not ready")));
+
+        assertThatThrownBy(() -> v1Client(wm).verifyAcme(TEST_AGENT_ID))
+            .isInstanceOf(AnsValidationException.class)
+            .hasMessageContaining("Validation error");
+    }
+
+    @Test
+    @DisplayName("v1 verifyDns maps 404 to AnsNotFoundException")
+    void v1VerifyDnsNotFound(WireMockRuntimeInfo wm) {
+        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/verify-dns"))
+            .willReturn(errorResponse(404, "NOT_FOUND", "Agent not found")));
+
+        assertThatThrownBy(() -> v1Client(wm).verifyDns(TEST_AGENT_ID))
+            .isInstanceOf(AnsNotFoundException.class)
+            .hasMessageContaining("not found");
+    }
+
+    @Test
+    @DisplayName("v1 verifyDns maps 401 to AnsAuthenticationException")
+    void v1VerifyDnsAuth(WireMockRuntimeInfo wm) {
+        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/verify-dns"))
+            .willReturn(errorResponse(401, "UNAUTHORIZED", "Invalid token")));
+
+        assertThatThrownBy(() -> v1Client(wm).verifyDns(TEST_AGENT_ID))
+            .isInstanceOf(AnsAuthenticationException.class)
+            .hasMessageContaining("Authentication failed");
+    }
+
+    @Test
+    @DisplayName("v1 verifyDns maps 422 to AnsValidationException")
+    void v1VerifyDnsValidation(WireMockRuntimeInfo wm) {
+        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/verify-dns"))
+            .willReturn(errorResponse(422, "DNS_NOT_PROVISIONED", "TXT record missing")));
+
+        assertThatThrownBy(() -> v1Client(wm).verifyDns(TEST_AGENT_ID))
+            .isInstanceOf(AnsValidationException.class)
+            .hasMessageContaining("Validation error");
+    }
+
+    @Test
+    @DisplayName("v1 revoke maps 404 to AnsNotFoundException")
+    void v1RevokeNotFound(WireMockRuntimeInfo wm) {
+        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/revoke"))
+            .willReturn(errorResponse(404, "NOT_FOUND", "Agent not found")));
+
+        AgentRevocationRequest request = new AgentRevocationRequest()
+            .reason(RevocationReason.CESSATION_OF_OPERATION);
+
+        assertThatThrownBy(() -> v1Client(wm).revokeAgent(TEST_AGENT_ID, request))
+            .isInstanceOf(AnsNotFoundException.class)
+            .hasMessageContaining("not found");
+    }
+
+    @Test
+    @DisplayName("v1 revoke maps 422 to AnsValidationException")
+    void v1RevokeValidation(WireMockRuntimeInfo wm) {
+        stubFor(post(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/revoke"))
+            .willReturn(errorResponse(422, "INVALID_ARGUMENT", "Unknown revocation reason")));
+
+        AgentRevocationRequest request = new AgentRevocationRequest()
+            .reason(RevocationReason.CESSATION_OF_OPERATION);
+
+        assertThatThrownBy(() -> v1Client(wm).revokeAgent(TEST_AGENT_ID, request))
+            .isInstanceOf(AnsValidationException.class)
+            .hasMessageContaining("Validation error");
+    }
+
     // ==================== Response bodies ====================
+
+    private com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder errorResponse(
+        int status, String code, String message) {
+        return aResponse()
+            .withStatus(status)
+            .withHeader("Content-Type", "application/json")
+            .withBody("{\"status\":\"error\",\"code\":\"" + code + "\",\"message\":\"" + message + "\"}");
+    }
 
     private String v1PendingWithSelfLink() {
         return """

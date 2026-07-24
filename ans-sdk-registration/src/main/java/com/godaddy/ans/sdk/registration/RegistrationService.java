@@ -147,7 +147,7 @@ class RegistrationService {
             return null;
         }
         for (Link link : pending.getLinks()) {
-            if ("self".equals(link.getRel())) {
+            if ("self".equals(link.getRel()) && link.getHref() != null) {
                 return link.getHref().getPath();
             }
         }

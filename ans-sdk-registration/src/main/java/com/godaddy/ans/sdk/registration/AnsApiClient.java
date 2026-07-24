@@ -182,10 +182,11 @@ class AnsApiClient {
      */
     String serializeToJsonWithoutField(Object object, String fieldName) {
         try {
-            JsonNode tree = objectMapper.readTree(objectMapper.writeValueAsString(object));
+            JsonNode tree = objectMapper.valueToTree(object);
             if (tree instanceof ObjectNode objectNode) {
                 objectNode.remove(fieldName);
             }
+
             return objectMapper.writeValueAsString(tree);
         } catch (IOException e) {
             throw new AnsServerException("Failed to serialize request: " + e.getMessage(), 0, e, null);

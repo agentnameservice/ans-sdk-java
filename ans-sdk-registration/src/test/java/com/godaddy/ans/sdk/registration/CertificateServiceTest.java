@@ -529,4 +529,91 @@ class CertificateServiceTest {
             .isInstanceOf(AnsServerException.class)
             .hasMessageContaining("Failed to parse");
     }
+
+    // ==================== V1 error paths ====================
+
+    @Test
+    @DisplayName("getServerCertificates on V1 should throw AnsAuthenticationException on 401")
+    void v1GetServerCertificatesShouldThrowAuthExceptionOn401(WireMockRuntimeInfo wmRuntimeInfo) {
+        // Given
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+            .willReturn(aResponse()
+                .withStatus(401)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"message\": \"Invalid API key\"}")));
+
+        CertificateService certificateService = createV1CertificateService(wmRuntimeInfo);
+
+        // When/Then
+        assertThatThrownBy(() -> certificateService.getServerCertificates(TEST_AGENT_ID))
+            .isInstanceOf(AnsAuthenticationException.class);
+    }
+
+    @Test
+    @DisplayName("getServerCertificates on V1 should throw AnsNotFoundException on 404")
+    void v1GetServerCertificatesShouldThrowNotFoundOn404(WireMockRuntimeInfo wmRuntimeInfo) {
+        // Given
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+            .willReturn(aResponse()
+                .withStatus(404)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"message\": \"Agent not found\"}")));
+
+        CertificateService certificateService = createV1CertificateService(wmRuntimeInfo);
+
+        // When/Then
+        assertThatThrownBy(() -> certificateService.getServerCertificates(TEST_AGENT_ID))
+            .isInstanceOf(AnsNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("getServerCertificates on V1 should throw AnsValidationException on 422")
+    void v1GetServerCertificatesShouldThrowValidationExceptionOn422(WireMockRuntimeInfo wmRuntimeInfo) {
+        // Given
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+            .willReturn(aResponse()
+                .withStatus(422)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"message\": \"Invalid agent ID format\"}")));
+
+        CertificateService certificateService = createV1CertificateService(wmRuntimeInfo);
+
+        // When/Then
+        assertThatThrownBy(() -> certificateService.getServerCertificates(TEST_AGENT_ID))
+            .isInstanceOf(AnsValidationException.class);
+    }
+
+    @Test
+    @DisplayName("getServerCertificates on V1 should throw AnsServerException on 500")
+    void v1GetServerCertificatesShouldThrowServerExceptionOn500(WireMockRuntimeInfo wmRuntimeInfo) {
+        // Given
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+            .willReturn(aResponse()
+                .withStatus(500)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"message\": \"Internal server error\"}")));
+
+        CertificateService certificateService = createV1CertificateService(wmRuntimeInfo);
+
+        // When/Then
+        assertThatThrownBy(() -> certificateService.getServerCertificates(TEST_AGENT_ID))
+            .isInstanceOf(AnsServerException.class);
+    }
+
+    @Test
+    @DisplayName("getIdentityCertificates on V1 should throw AnsAuthenticationException on 401")
+    void v1GetIdentityCertificatesShouldThrowAuthExceptionOn401(WireMockRuntimeInfo wmRuntimeInfo) {
+        // Given
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/identity"))
+            .willReturn(aResponse()
+                .withStatus(401)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"message\": \"Unauthorized\"}")));
+
+        CertificateService certificateService = createV1CertificateService(wmRuntimeInfo);
+
+        // When/Then
+        assertThatThrownBy(() -> certificateService.getIdentityCertificates(TEST_AGENT_ID))
+            .isInstanceOf(AnsAuthenticationException.class);
+    }
 }

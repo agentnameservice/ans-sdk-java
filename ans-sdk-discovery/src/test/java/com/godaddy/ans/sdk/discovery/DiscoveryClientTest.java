@@ -165,7 +165,7 @@ class DiscoveryClientTest {
         AgentDetails result = client.resolve(TEST_AGENT_HOST, "^1.0.0");
 
         assertThat(result).isNotNull();
-        assertThat(result.getAgentId()).isEqualTo(TEST_AGENT_ID);
+        assertThat(result.getAgentId()).hasToString(TEST_AGENT_ID);
         assertThat(result.getAgentHost()).isEqualTo(TEST_AGENT_HOST);
         assertThat(result.getAgentDisplayName()).isEqualTo("Booking Agent");
         assertThat(result.getAgentDescription()).isEqualTo("A booking agent for scheduling appointments");
@@ -225,7 +225,7 @@ class DiscoveryClientTest {
         AgentDetails result = client.resolve(TEST_AGENT_HOST);
 
         assertThat(result).isNotNull();
-        assertThat(result.getAgentId()).isEqualTo(TEST_AGENT_ID);
+        assertThat(result.getAgentId()).hasToString(TEST_AGENT_ID);
 
         // Verify wildcard version was used
         verify(postRequestedFor(urlEqualTo("/v1/agents/resolution"))
@@ -259,7 +259,7 @@ class DiscoveryClientTest {
         AgentDetails result = future.get();
 
         assertThat(result).isNotNull();
-        assertThat(result.getAgentId()).isEqualTo(TEST_AGENT_ID);
+        assertThat(result.getAgentId()).hasToString(TEST_AGENT_ID);
     }
 
     // ==================== Resolution Error Tests ====================
@@ -444,7 +444,7 @@ class DiscoveryClientTest {
         AgentDetails result = client.getAgent(TEST_AGENT_ID);
 
         assertThat(result).isNotNull();
-        assertThat(result.getAgentId()).isEqualTo(TEST_AGENT_ID);
+        assertThat(result.getAgentId()).hasToString(TEST_AGENT_ID);
         assertThat(result.getAgentHost()).isEqualTo(TEST_AGENT_HOST);
         assertThat(result.getVersion()).isEqualTo("1.0.0");
         assertThat(result.getAgentStatus()).isEqualTo(AgentLifecycleStatus.ACTIVE);
@@ -517,7 +517,7 @@ class DiscoveryClientTest {
         AgentDetails result = future.get();
 
         assertThat(result).isNotNull();
-        assertThat(result.getAgentId()).isEqualTo(TEST_AGENT_ID);
+        assertThat(result.getAgentId()).hasToString(TEST_AGENT_ID);
     }
 
     @Test
@@ -583,7 +583,7 @@ class DiscoveryClientTest {
         AgentDetails result = client.resolve(TEST_AGENT_HOST);
 
         assertThat(result).isNotNull();
-        assertThat(result.getAgentId()).isEqualTo(TEST_AGENT_ID);
+        assertThat(result.getAgentId()).hasToString(TEST_AGENT_ID);
     }
 
     @Test

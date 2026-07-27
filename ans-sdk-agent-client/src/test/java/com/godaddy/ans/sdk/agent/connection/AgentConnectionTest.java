@@ -5,6 +5,7 @@ import com.godaddy.ans.sdk.agent.protocol.HttpApiClient;
 import com.godaddy.ans.sdk.model.generated.AgentDetails;
 import com.godaddy.ans.sdk.model.generated.AgentEndpoint;
 import com.godaddy.ans.sdk.model.generated.AgentLifecycleStatus;
+import com.godaddy.ans.sdk.model.generated.Protocol;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,6 +17,7 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -36,16 +38,16 @@ class AgentConnectionTest {
     void setUp() {
         // Create test agent details with endpoints
         AgentEndpoint httpApiEndpoint = new AgentEndpoint();
-        httpApiEndpoint.setProtocol(AgentEndpoint.ProtocolEnum.HTTP_API);
+        httpApiEndpoint.setProtocol(Protocol.HTTP_API);
         httpApiEndpoint.setAgentUrl(URI.create("https://agent.example.com/api"));
         httpApiEndpoint.setMetaDataUrl(URI.create("https://agent.example.com/metadata"));
 
         AgentEndpoint a2aEndpoint = new AgentEndpoint();
-        a2aEndpoint.setProtocol(AgentEndpoint.ProtocolEnum.A2_A);
+        a2aEndpoint.setProtocol(Protocol.A2_A);
         a2aEndpoint.setAgentUrl(URI.create("wss://agent.example.com/a2a"));
 
         agentDetails = new AgentDetails();
-        agentDetails.setAgentId("test-agent-id");
+        agentDetails.setAgentId(UUID.randomUUID());
         agentDetails.setAnsName("ans://v1.0.0.agent.example.com");
         agentDetails.setAgentHost("agent.example.com");
         agentDetails.setVersion("1.0.0");
@@ -94,7 +96,7 @@ class AgentConnectionTest {
         // Given
         AgentConnection connection = new AgentConnection(agentDetails, ansHttpClient);
 
-        // When/Then - using protocol value format (HTTP-API)
+        // When/Then - legacy hyphenated alias (HTTP-API) should still match HTTP_API
         assertThat(connection.supportsProtocol("HTTP-API")).isTrue();
     }
 

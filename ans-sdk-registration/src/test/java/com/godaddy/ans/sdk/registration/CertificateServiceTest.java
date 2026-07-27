@@ -4,6 +4,7 @@ import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import com.godaddy.ans.sdk.auth.ApiKeyCredentialsProvider;
 import com.godaddy.ans.sdk.config.AnsConfiguration;
+import com.godaddy.ans.sdk.config.ApiVersion;
 import com.godaddy.ans.sdk.config.Environment;
 import com.godaddy.ans.sdk.exception.AnsAuthenticationException;
 import com.godaddy.ans.sdk.exception.AnsNotFoundException;
@@ -41,7 +42,51 @@ class CertificateServiceTest {
             .baseUrl(wmRuntimeInfo.getHttpBaseUrl())
             .credentialsProvider(new ApiKeyCredentialsProvider(API_KEY, API_SECRET))
             .build();
-        return new CertificateService(config);
+        return new CertificateService(new AnsApiClient(config));
+    }
+
+    private CertificateService createV1CertificateService(WireMockRuntimeInfo wmRuntimeInfo) {
+        AnsConfiguration config = AnsConfiguration.builder()
+            .environment(Environment.OTE)
+            .baseUrl(wmRuntimeInfo.getHttpBaseUrl())
+            .apiVersion(ApiVersion.V1)
+            .credentialsProvider(new ApiKeyCredentialsProvider(API_KEY, API_SECRET))
+            .build();
+        return new CertificateService(new AnsApiClient(config));
+    }
+
+    // ==================== API version routing ====================
+
+    @Test
+    @DisplayName("v1 lane targets /v1/agents/{id}/certificates/server")
+    void v1ServerCertificatesPath(WireMockRuntimeInfo wmRuntimeInfo) {
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("[]")));
+
+        List<CertificateResponse> certs = createV1CertificateService(wmRuntimeInfo)
+            .getServerCertificates(TEST_AGENT_ID);
+
+        assertThat(certs).isEmpty();
+        verify(getRequestedFor(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server")));
+    }
+
+    @Test
+    @DisplayName("v1 lane targets /v1/agents/{id}/certificates/identity")
+    void v1IdentityCertificatesPath(WireMockRuntimeInfo wmRuntimeInfo) {
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/identity"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("[]")));
+
+        List<CertificateResponse> certs = createV1CertificateService(wmRuntimeInfo)
+            .getIdentityCertificates(TEST_AGENT_ID);
+
+        assertThat(certs).isEmpty();
+        verify(getRequestedFor(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/identity")));
     }
 
     // ==================== getServerCertificates Tests ====================
@@ -67,7 +112,7 @@ class CertificateServiceTest {
             ]
             """;
 
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/server"))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
@@ -85,7 +130,7 @@ class CertificateServiceTest {
         assertThat(cert.getCertificateIssuer()).isEqualTo("CN=ANS CA");
         assertThat(cert.getCertificatePEM()).startsWith("-----BEGIN CERTIFICATE-----");
 
-        verify(getRequestedFor(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+        verify(getRequestedFor(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/server"))
             .withHeader("Authorization", containing("sso-key")));
     }
 
@@ -93,7 +138,7 @@ class CertificateServiceTest {
     @DisplayName("getServerCertificates should return empty list when no certificates exist")
     void getServerCertificatesShouldReturnEmptyListWhenNoCertificates(WireMockRuntimeInfo wmRuntimeInfo) {
         // Given
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/server"))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
@@ -112,7 +157,7 @@ class CertificateServiceTest {
     @DisplayName("getServerCertificates should throw AnsNotFoundException when agent not found")
     void getServerCertificatesShouldThrowNotFoundWhenAgentNotFound(WireMockRuntimeInfo wmRuntimeInfo) {
         // Given
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/server"))
             .willReturn(aResponse()
                 .withStatus(404)
                 .withHeader("Content-Type", "application/json")
@@ -148,7 +193,7 @@ class CertificateServiceTest {
             ]
             """;
 
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/server"))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
@@ -185,7 +230,7 @@ class CertificateServiceTest {
             ]
             """;
 
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/identity"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/identity"))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
@@ -202,7 +247,7 @@ class CertificateServiceTest {
         assertThat(cert.getCertificateSubject()).isEqualTo("CN=test-agent.example.com");
         assertThat(cert.getCertificateIssuer()).isEqualTo("CN=ANS Identity CA");
 
-        verify(getRequestedFor(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/identity"))
+        verify(getRequestedFor(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/identity"))
             .withHeader("Authorization", containing("sso-key")));
     }
 
@@ -210,7 +255,7 @@ class CertificateServiceTest {
     @DisplayName("getIdentityCertificates should return empty list when no certificates exist")
     void getIdentityCertificatesShouldReturnEmptyListWhenNoCertificates(WireMockRuntimeInfo wmRuntimeInfo) {
         // Given
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/identity"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/identity"))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
@@ -229,7 +274,7 @@ class CertificateServiceTest {
     @DisplayName("getIdentityCertificates should throw AnsNotFoundException when agent not found")
     void getIdentityCertificatesShouldThrowNotFoundWhenAgentNotFound(WireMockRuntimeInfo wmRuntimeInfo) {
         // Given
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/identity"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/identity"))
             .willReturn(aResponse()
                 .withStatus(404)
                 .withHeader("Content-Type", "application/json")
@@ -290,7 +335,7 @@ class CertificateServiceTest {
     @DisplayName("getServerCertificates should throw AnsAuthenticationException on 401")
     void getServerCertificatesShouldThrowAuthExceptionOn401(WireMockRuntimeInfo wmRuntimeInfo) {
         // Given
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/server"))
             .willReturn(aResponse()
                 .withStatus(401)
                 .withHeader("Content-Type", "application/json")
@@ -309,7 +354,7 @@ class CertificateServiceTest {
     @DisplayName("getServerCertificates should throw AnsAuthenticationException on 403")
     void getServerCertificatesShouldThrowAuthExceptionOn403(WireMockRuntimeInfo wmRuntimeInfo) {
         // Given
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/server"))
             .willReturn(aResponse()
                 .withStatus(403)
                 .withHeader("Content-Type", "application/json")
@@ -327,7 +372,7 @@ class CertificateServiceTest {
     @DisplayName("getIdentityCertificates should throw AnsAuthenticationException on 401")
     void getIdentityCertificatesShouldThrowAuthExceptionOn401(WireMockRuntimeInfo wmRuntimeInfo) {
         // Given
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/identity"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/identity"))
             .willReturn(aResponse()
                 .withStatus(401)
                 .withHeader("Content-Type", "application/json")
@@ -346,7 +391,7 @@ class CertificateServiceTest {
     @DisplayName("getServerCertificates should throw AnsValidationException on 422")
     void getServerCertificatesShouldThrowValidationExceptionOn422(WireMockRuntimeInfo wmRuntimeInfo) {
         // Given
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/server"))
             .willReturn(aResponse()
                 .withStatus(422)
                 .withHeader("Content-Type", "application/json")
@@ -364,7 +409,7 @@ class CertificateServiceTest {
     @DisplayName("getIdentityCertificates should throw AnsValidationException on 422")
     void getIdentityCertificatesShouldThrowValidationExceptionOn422(WireMockRuntimeInfo wmRuntimeInfo) {
         // Given
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/identity"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/identity"))
             .willReturn(aResponse()
                 .withStatus(422)
                 .withHeader("Content-Type", "application/json")
@@ -383,7 +428,7 @@ class CertificateServiceTest {
     @DisplayName("getServerCertificates should throw AnsServerException on 500")
     void getServerCertificatesShouldThrowServerExceptionOn500(WireMockRuntimeInfo wmRuntimeInfo) {
         // Given
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/server"))
             .willReturn(aResponse()
                 .withStatus(500)
                 .withHeader("Content-Type", "application/json")
@@ -402,7 +447,7 @@ class CertificateServiceTest {
     @DisplayName("getServerCertificates should throw AnsServerException on 502")
     void getServerCertificatesShouldThrowServerExceptionOn502(WireMockRuntimeInfo wmRuntimeInfo) {
         // Given
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/server"))
             .willReturn(aResponse()
                 .withStatus(502)
                 .withHeader("Content-Type", "application/json")
@@ -419,7 +464,7 @@ class CertificateServiceTest {
     @DisplayName("getServerCertificates should throw AnsServerException on 503")
     void getServerCertificatesShouldThrowServerExceptionOn503(WireMockRuntimeInfo wmRuntimeInfo) {
         // Given
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/server"))
             .willReturn(aResponse()
                 .withStatus(503)
                 .withHeader("Content-Type", "application/json")
@@ -436,7 +481,7 @@ class CertificateServiceTest {
     @DisplayName("getIdentityCertificates should throw AnsServerException on 500")
     void getIdentityCertificatesShouldThrowServerExceptionOn500(WireMockRuntimeInfo wmRuntimeInfo) {
         // Given
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/identity"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/identity"))
             .willReturn(aResponse()
                 .withStatus(500)
                 .withHeader("Content-Type", "application/json")
@@ -453,7 +498,7 @@ class CertificateServiceTest {
     @DisplayName("getServerCertificates should throw AnsServerException on unexpected 4xx error")
     void getServerCertificatesShouldThrowServerExceptionOnUnexpected4xx(WireMockRuntimeInfo wmRuntimeInfo) {
         // Given - 418 I'm a teapot (unexpected client error)
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/server"))
             .willReturn(aResponse()
                 .withStatus(418)
                 .withHeader("Content-Type", "application/json")
@@ -471,7 +516,7 @@ class CertificateServiceTest {
     @DisplayName("getServerCertificates should throw AnsServerException on malformed JSON response")
     void getServerCertificatesShouldThrowServerExceptionOnMalformedJson(WireMockRuntimeInfo wmRuntimeInfo) {
         // Given
-        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID + "/certificates/server"))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
@@ -483,5 +528,92 @@ class CertificateServiceTest {
         assertThatThrownBy(() -> certificateService.getServerCertificates(TEST_AGENT_ID))
             .isInstanceOf(AnsServerException.class)
             .hasMessageContaining("Failed to parse");
+    }
+
+    // ==================== V1 error paths ====================
+
+    @Test
+    @DisplayName("getServerCertificates on V1 should throw AnsAuthenticationException on 401")
+    void v1GetServerCertificatesShouldThrowAuthExceptionOn401(WireMockRuntimeInfo wmRuntimeInfo) {
+        // Given
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+            .willReturn(aResponse()
+                .withStatus(401)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"message\": \"Invalid API key\"}")));
+
+        CertificateService certificateService = createV1CertificateService(wmRuntimeInfo);
+
+        // When/Then
+        assertThatThrownBy(() -> certificateService.getServerCertificates(TEST_AGENT_ID))
+            .isInstanceOf(AnsAuthenticationException.class);
+    }
+
+    @Test
+    @DisplayName("getServerCertificates on V1 should throw AnsNotFoundException on 404")
+    void v1GetServerCertificatesShouldThrowNotFoundOn404(WireMockRuntimeInfo wmRuntimeInfo) {
+        // Given
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+            .willReturn(aResponse()
+                .withStatus(404)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"message\": \"Agent not found\"}")));
+
+        CertificateService certificateService = createV1CertificateService(wmRuntimeInfo);
+
+        // When/Then
+        assertThatThrownBy(() -> certificateService.getServerCertificates(TEST_AGENT_ID))
+            .isInstanceOf(AnsNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("getServerCertificates on V1 should throw AnsValidationException on 422")
+    void v1GetServerCertificatesShouldThrowValidationExceptionOn422(WireMockRuntimeInfo wmRuntimeInfo) {
+        // Given
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+            .willReturn(aResponse()
+                .withStatus(422)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"message\": \"Invalid agent ID format\"}")));
+
+        CertificateService certificateService = createV1CertificateService(wmRuntimeInfo);
+
+        // When/Then
+        assertThatThrownBy(() -> certificateService.getServerCertificates(TEST_AGENT_ID))
+            .isInstanceOf(AnsValidationException.class);
+    }
+
+    @Test
+    @DisplayName("getServerCertificates on V1 should throw AnsServerException on 500")
+    void v1GetServerCertificatesShouldThrowServerExceptionOn500(WireMockRuntimeInfo wmRuntimeInfo) {
+        // Given
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/server"))
+            .willReturn(aResponse()
+                .withStatus(500)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"message\": \"Internal server error\"}")));
+
+        CertificateService certificateService = createV1CertificateService(wmRuntimeInfo);
+
+        // When/Then
+        assertThatThrownBy(() -> certificateService.getServerCertificates(TEST_AGENT_ID))
+            .isInstanceOf(AnsServerException.class);
+    }
+
+    @Test
+    @DisplayName("getIdentityCertificates on V1 should throw AnsAuthenticationException on 401")
+    void v1GetIdentityCertificatesShouldThrowAuthExceptionOn401(WireMockRuntimeInfo wmRuntimeInfo) {
+        // Given
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/certificates/identity"))
+            .willReturn(aResponse()
+                .withStatus(401)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"message\": \"Unauthorized\"}")));
+
+        CertificateService certificateService = createV1CertificateService(wmRuntimeInfo);
+
+        // When/Then
+        assertThatThrownBy(() -> certificateService.getIdentityCertificates(TEST_AGENT_ID))
+            .isInstanceOf(AnsAuthenticationException.class);
     }
 }

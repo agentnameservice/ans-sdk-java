@@ -115,13 +115,13 @@ class AnsConfigurationTest {
     }
 
     @Test
-    @DisplayName("Should throw when environment is not set")
+    @DisplayName("Should throw when neither environment nor base URL is set")
     void shouldThrowWhenEnvironmentNotSet() {
         assertThatThrownBy(() -> AnsConfiguration.builder()
             .credentialsProvider(testProvider)
             .build())
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("Environment is required");
+            .hasMessageContaining("Either an environment or a base URL is required");
     }
 
     @Test
@@ -146,5 +146,40 @@ class AnsConfigurationTest {
             .build();
 
         assertThat(config.getCredentialsProvider()).isSameAs(testProvider);
+    }
+
+    @Test
+    @DisplayName("Should default API version to V2")
+    void shouldDefaultApiVersionToV2() {
+        AnsConfiguration config = AnsConfiguration.builder()
+            .environment(Environment.OTE)
+            .credentialsProvider(testProvider)
+            .build();
+
+        assertThat(config.getApiVersion()).isEqualTo(ApiVersion.V2);
+    }
+
+    @Test
+    @DisplayName("Should override API version to V1")
+    void shouldOverrideApiVersionToV1() {
+        AnsConfiguration config = AnsConfiguration.builder()
+            .environment(Environment.OTE)
+            .credentialsProvider(testProvider)
+            .apiVersion(ApiVersion.V1)
+            .build();
+
+        assertThat(config.getApiVersion()).isEqualTo(ApiVersion.V1);
+    }
+
+    @Test
+    @DisplayName("Should throw when API version is null")
+    void shouldThrowWhenApiVersionNull() {
+        assertThatThrownBy(() -> AnsConfiguration.builder()
+            .environment(Environment.OTE)
+            .credentialsProvider(testProvider)
+            .apiVersion(null)
+            .build())
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("API version");
     }
 }

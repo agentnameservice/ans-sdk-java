@@ -5,12 +5,12 @@ import com.godaddy.ans.sdk.concurrent.AnsExecutors;
 import com.godaddy.ans.sdk.config.AnsConfiguration;
 import com.godaddy.ans.sdk.config.ApiVersion;
 import com.godaddy.ans.sdk.config.Environment;
-import com.godaddy.ans.sdk.model.generated.AgentDetails;
-import com.godaddy.ans.sdk.model.generated.AgentRegistrationRequest;
-import com.godaddy.ans.sdk.model.generated.AgentRevocationRequest;
-import com.godaddy.ans.sdk.model.generated.AgentRevocationResponse;
-import com.godaddy.ans.sdk.model.generated.AgentStatus;
-import com.godaddy.ans.sdk.model.generated.RevocationReason;
+import com.godaddy.ans.sdk.model.AgentDetails;
+import com.godaddy.ans.sdk.model.AgentRegistrationRequest;
+import com.godaddy.ans.sdk.model.AgentRevocationRequest;
+import com.godaddy.ans.sdk.model.AgentRevocationResponse;
+import com.godaddy.ans.sdk.model.AgentStatus;
+import com.godaddy.ans.sdk.model.RevocationReason;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;

@@ -4,7 +4,7 @@ import com.godaddy.ans.sdk.auth.AnsCredentialsProvider;
 import com.godaddy.ans.sdk.concurrent.AnsExecutors;
 import com.godaddy.ans.sdk.config.AnsConfiguration;
 import com.godaddy.ans.sdk.config.Environment;
-import com.godaddy.ans.sdk.model.generated.AgentDetails;
+import com.godaddy.ans.sdk.model.AgentDetails;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;

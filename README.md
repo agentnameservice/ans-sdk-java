@@ -6,7 +6,7 @@ Java SDK for the Agent Name Service (ANS) Registry. This SDK provides clients fo
 
 The ANS Registry SDK is based off of the REST API. The spec is documented using the OpenAPI specification:
 - [ANS OpenAPI Spec (ans repo)](https://github.com/agentnameservice/ans/blob/main/spec/api-spec-v2.yaml)
-- Local copy used for code generation: [`ans-sdk-api/spec/api-spec.yaml`](ans-sdk-api/spec/api-spec.yaml)
+- Local copy for reference: [`ans-sdk-api/spec/api-spec.yaml`](ans-sdk-api/spec/api-spec.yaml)
 
 ## Requirements
 

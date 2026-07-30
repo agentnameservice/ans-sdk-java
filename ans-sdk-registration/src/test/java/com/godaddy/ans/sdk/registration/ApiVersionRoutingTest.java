@@ -13,12 +13,14 @@ import com.godaddy.ans.sdk.exception.AnsValidationException;
 import com.godaddy.ans.sdk.model.AgentEndpoint;
 import com.godaddy.ans.sdk.model.AgentRegistrationRequest;
 import com.godaddy.ans.sdk.model.AgentRevocationRequest;
+import com.godaddy.ans.sdk.model.DiscoveryProfile;
 import com.godaddy.ans.sdk.model.Protocol;
 import com.godaddy.ans.sdk.model.RevocationReason;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
+import java.util.Set;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.absent;
@@ -88,8 +90,8 @@ class ApiVersionRoutingTest {
     }
 
     @Test
-    @DisplayName("v1 register omits the v2-only discoveryProfiles field from the wire body")
-    void v1RegisterStripsDiscoveryProfiles(WireMockRuntimeInfo wm) {
+    @DisplayName("v1 register omits the empty discoveryProfiles default from the wire body")
+    void v1RegisterOmitsDefaultDiscoveryProfiles(WireMockRuntimeInfo wm) {
         stubFor(post(urlEqualTo("/v1/agents/register"))
             .willReturn(aResponse()
                 .withStatus(202)
@@ -107,6 +109,20 @@ class ApiVersionRoutingTest {
         verify(postRequestedFor(urlEqualTo("/v1/agents/register"))
             .withRequestBody(containing("\"agentDisplayName\":\"Test Agent\""))
             .withRequestBody(matchingJsonPath("$.discoveryProfiles", absent())));
+    }
+
+    @Test
+    @DisplayName("v1 register rejects an explicit discoveryProfiles selection")
+    void v1RegisterRejectsExplicitDiscoveryProfiles(WireMockRuntimeInfo wm) {
+        AgentRegistrationRequest request = sampleRequest()
+            .discoveryProfiles(Set.of(DiscoveryProfile.ANS_TXT));
+
+        assertThatThrownBy(() -> v1Client(wm).registerAgent(request))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("ApiVersion.V2");
+
+        // The request must fail before any HTTP call reaches the register endpoint.
+        verify(0, postRequestedFor(urlEqualTo("/v1/agents/register")));
     }
 
     @Test

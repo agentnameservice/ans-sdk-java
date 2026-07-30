@@ -17,6 +17,7 @@ import com.godaddy.ans.sdk.model.AgentRegistrationRequest;
 import com.godaddy.ans.sdk.model.AgentRevocationRequest;
 import com.godaddy.ans.sdk.model.AgentRevocationResponse;
 import com.godaddy.ans.sdk.model.AgentStatus;
+import com.godaddy.ans.sdk.model.DiscoveryProfile;
 import com.godaddy.ans.sdk.model.Protocol;
 import com.godaddy.ans.sdk.model.RegistrationPending;
 import com.godaddy.ans.sdk.model.RevocationReason;
@@ -25,11 +26,14 @@ import org.junit.jupiter.api.DisplayName;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.Set;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.absent;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
@@ -174,10 +178,60 @@ class RegistrationClientTest {
 
         verify(postRequestedFor(urlEqualTo("/v2/ans/agents"))
             .withRequestBody(containing("\"agentDisplayName\":\"Test Agent\""))
-            // discoveryProfiles is v2-only and defaults to [ANS_DNSAID] on the wire
-            .withRequestBody(containing("\"discoveryProfiles\""))
-            .withRequestBody(containing("ANS_DNSAID"))
             .withHeader("Authorization", equalTo("sso-jwt " + TEST_JWT_TOKEN)));
+    }
+
+    @Test
+    @DisplayName("v2 register sends an explicit discoveryProfiles selection on the wire")
+    void v2RegisterSendsExplicitDiscoveryProfiles(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(post(urlEqualTo("/v2/ans/agents"))
+            .willReturn(aResponse().withStatus(202)
+                .withHeader("Content-Type", "application/json")
+                .withBody(registrationPendingResponse())));
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID))
+            .willReturn(aResponse().withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(agentDetailsResponse())));
+
+        RegistrationClient client = RegistrationClient.builder()
+            .environment(Environment.OTE)
+            .baseUrl(baseUrl)
+            .credentialsProvider(new JwtCredentialsProvider(TEST_JWT_TOKEN))
+            .build();
+
+        client.registerAgent(sampleRegistrationRequest()
+            .discoveryProfiles(Set.of(DiscoveryProfile.ANS_TXT)));
+
+        verify(postRequestedFor(urlEqualTo("/v2/ans/agents"))
+            .withRequestBody(matchingJsonPath("$.discoveryProfiles[?(@ == 'ANS_TXT')]")));
+    }
+
+    @Test
+    @DisplayName("v2 register omits the empty discoveryProfiles default from the wire")
+    void v2RegisterOmitsDefaultDiscoveryProfiles(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(post(urlEqualTo("/v2/ans/agents"))
+            .willReturn(aResponse().withStatus(202)
+                .withHeader("Content-Type", "application/json")
+                .withBody(registrationPendingResponse())));
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID))
+            .willReturn(aResponse().withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(agentDetailsResponse())));
+
+        RegistrationClient client = RegistrationClient.builder()
+            .environment(Environment.OTE)
+            .baseUrl(baseUrl)
+            .credentialsProvider(new JwtCredentialsProvider(TEST_JWT_TOKEN))
+            .build();
+
+        client.registerAgent(sampleRegistrationRequest());
+
+        verify(postRequestedFor(urlEqualTo("/v2/ans/agents"))
+            .withRequestBody(matchingJsonPath("$.discoveryProfiles", absent())));
     }
 
     @Test
@@ -783,6 +837,18 @@ class RegistrationClientTest {
     }
 
     // ==================== Helper Methods ====================
+
+    private AgentRegistrationRequest sampleRegistrationRequest() {
+        return new AgentRegistrationRequest()
+            .agentDisplayName("Test Agent")
+            .version("1.0.0")
+            .agentHost("test-agent.example.com")
+            .addEndpointsItem(new AgentEndpoint()
+                .protocol(Protocol.A2_A)
+                .agentUrl(URI.create("https://test-agent.example.com/a2a")))
+            .identityCsrPEM("-----BEGIN CERTIFICATE REQUEST-----\ntest\n-----END CERTIFICATE REQUEST-----")
+            .serverCsrPEM("-----BEGIN CERTIFICATE REQUEST-----\ntest\n-----END CERTIFICATE REQUEST-----");
+    }
 
     private String registrationPendingResponse() {
         return """

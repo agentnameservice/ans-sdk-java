@@ -5,7 +5,7 @@ import com.godaddy.ans.sdk.config.ApiVersion;
 import com.godaddy.ans.sdk.exception.AnsAuthenticationException;
 import com.godaddy.ans.sdk.exception.AnsNotFoundException;
 import com.godaddy.ans.sdk.exception.AnsServerException;
-import com.godaddy.ans.sdk.model.generated.CertificateResponse;
+import com.godaddy.ans.sdk.model.CertificateResponse;
 
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;

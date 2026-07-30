@@ -2,13 +2,13 @@ package com.godaddy.ans.sdk.registration;
 
 import com.godaddy.ans.sdk.config.ApiVersion;
 import com.godaddy.ans.sdk.exception.AnsServerException;
-import com.godaddy.ans.sdk.model.generated.AgentDetails;
-import com.godaddy.ans.sdk.model.generated.AgentRegistrationRequest;
-import com.godaddy.ans.sdk.model.generated.AgentRevocationRequest;
-import com.godaddy.ans.sdk.model.generated.AgentRevocationResponse;
-import com.godaddy.ans.sdk.model.generated.AgentStatus;
-import com.godaddy.ans.sdk.model.generated.Link;
-import com.godaddy.ans.sdk.model.generated.RegistrationPending;
+import com.godaddy.ans.sdk.model.AgentDetails;
+import com.godaddy.ans.sdk.model.AgentRegistrationRequest;
+import com.godaddy.ans.sdk.model.AgentRevocationRequest;
+import com.godaddy.ans.sdk.model.AgentRevocationResponse;
+import com.godaddy.ans.sdk.model.AgentStatus;
+import com.godaddy.ans.sdk.model.Link;
+import com.godaddy.ans.sdk.model.RegistrationPending;
 
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;

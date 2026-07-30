@@ -10,11 +10,11 @@ import com.godaddy.ans.sdk.exception.AnsConflictException;
 import com.godaddy.ans.sdk.exception.AnsNotFoundException;
 import com.godaddy.ans.sdk.exception.AnsServerException;
 import com.godaddy.ans.sdk.exception.AnsValidationException;
-import com.godaddy.ans.sdk.model.generated.AgentEndpoint;
-import com.godaddy.ans.sdk.model.generated.AgentRegistrationRequest;
-import com.godaddy.ans.sdk.model.generated.AgentRevocationRequest;
-import com.godaddy.ans.sdk.model.generated.Protocol;
-import com.godaddy.ans.sdk.model.generated.RevocationReason;
+import com.godaddy.ans.sdk.model.AgentEndpoint;
+import com.godaddy.ans.sdk.model.AgentRegistrationRequest;
+import com.godaddy.ans.sdk.model.AgentRevocationRequest;
+import com.godaddy.ans.sdk.model.Protocol;
+import com.godaddy.ans.sdk.model.RevocationReason;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

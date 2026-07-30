@@ -3,9 +3,9 @@ package com.godaddy.ans.sdk.agent.connection;
 import com.godaddy.ans.sdk.agent.http.auth.HttpAuthHeadersProvider;
 import com.godaddy.ans.sdk.agent.http.AnsHttpClient;
 import com.godaddy.ans.sdk.agent.protocol.HttpApiClient;
-import com.godaddy.ans.sdk.model.generated.AgentDetails;
-import com.godaddy.ans.sdk.model.generated.AgentEndpoint;
-import com.godaddy.ans.sdk.model.generated.Protocol;
+import com.godaddy.ans.sdk.model.AgentDetails;
+import com.godaddy.ans.sdk.model.AgentEndpoint;
+import com.godaddy.ans.sdk.model.Protocol;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

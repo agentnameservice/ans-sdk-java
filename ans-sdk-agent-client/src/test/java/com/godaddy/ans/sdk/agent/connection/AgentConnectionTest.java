@@ -2,10 +2,10 @@ package com.godaddy.ans.sdk.agent.connection;
 
 import com.godaddy.ans.sdk.agent.http.AnsHttpClient;
 import com.godaddy.ans.sdk.agent.protocol.HttpApiClient;
-import com.godaddy.ans.sdk.model.generated.AgentDetails;
-import com.godaddy.ans.sdk.model.generated.AgentEndpoint;
-import com.godaddy.ans.sdk.model.generated.AgentLifecycleStatus;
-import com.godaddy.ans.sdk.model.generated.Protocol;
+import com.godaddy.ans.sdk.model.AgentDetails;
+import com.godaddy.ans.sdk.model.AgentEndpoint;
+import com.godaddy.ans.sdk.model.AgentLifecycleStatus;
+import com.godaddy.ans.sdk.model.Protocol;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

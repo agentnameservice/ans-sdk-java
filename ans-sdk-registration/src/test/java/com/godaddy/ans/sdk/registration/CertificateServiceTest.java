@@ -10,7 +10,7 @@ import com.godaddy.ans.sdk.exception.AnsAuthenticationException;
 import com.godaddy.ans.sdk.exception.AnsNotFoundException;
 import com.godaddy.ans.sdk.exception.AnsServerException;
 import com.godaddy.ans.sdk.exception.AnsValidationException;
-import com.godaddy.ans.sdk.model.generated.CertificateResponse;
+import com.godaddy.ans.sdk.model.CertificateResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

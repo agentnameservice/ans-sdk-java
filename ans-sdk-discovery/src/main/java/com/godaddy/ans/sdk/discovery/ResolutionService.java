@@ -10,7 +10,7 @@ import com.godaddy.ans.sdk.exception.AnsNotFoundException;
 import com.godaddy.ans.sdk.exception.AnsServerException;
 import com.godaddy.ans.sdk.exception.AnsValidationException;
 import com.godaddy.ans.sdk.http.HttpClientFactory;
-import com.godaddy.ans.sdk.model.generated.AgentDetails;
+import com.godaddy.ans.sdk.model.AgentDetails;
 
 import java.io.IOException;
 import java.net.URI;

@@ -29,7 +29,8 @@ import jakarta.annotation.Nullable;
     AgentDetails.JSON_PROPERTY_REGISTRATION_PENDING,
     AgentDetails.JSON_PROPERTY_LINKS,
     AgentDetails.JSON_PROPERTY_IDENTITIES
-})public class AgentDetails {
+})
+public class AgentDetails {
     public static final String JSON_PROPERTY_AGENT_ID = "agentId";
 
     @Nonnull

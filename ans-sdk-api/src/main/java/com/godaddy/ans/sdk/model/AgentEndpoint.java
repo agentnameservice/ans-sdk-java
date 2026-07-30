@@ -24,7 +24,8 @@ import jakarta.annotation.Nullable;
     AgentEndpoint.JSON_PROPERTY_PROTOCOL,
     AgentEndpoint.JSON_PROPERTY_FUNCTIONS,
     AgentEndpoint.JSON_PROPERTY_TRANSPORTS
-})public class AgentEndpoint {
+})
+public class AgentEndpoint {
     public static final String JSON_PROPERTY_AGENT_URL = "agentUrl";
 
 

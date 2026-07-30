@@ -21,7 +21,8 @@ import jakarta.annotation.Nullable;
     IdentityListResponse.JSON_PROPERTY_LIMIT,
     IdentityListResponse.JSON_PROPERTY_NEXT_CURSOR,
     IdentityListResponse.JSON_PROPERTY_HAS_MORE
-})public class IdentityListResponse {
+})
+public class IdentityListResponse {
     public static final String JSON_PROPERTY_ITEMS = "items";
 
     @Nonnull

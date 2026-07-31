@@ -6,7 +6,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -78,7 +77,7 @@ public class AgentRegistrationRequest {
     public static final String JSON_PROPERTY_DISCOVERY_PROFILES = "discoveryProfiles";
 
     @Nullable
-    private Set<DiscoveryProfile> discoveryProfiles = new LinkedHashSet<>(Arrays.asList(DiscoveryProfile.ANS_DNSAID));
+    private Set<DiscoveryProfile> discoveryProfiles = new LinkedHashSet<>();
 
     public AgentRegistrationRequest() {
     }
@@ -301,7 +300,7 @@ public class AgentRegistrationRequest {
 
     public AgentRegistrationRequest addDiscoveryProfilesItem(DiscoveryProfile discoveryProfilesItem) {
         if (this.discoveryProfiles == null) {
-            this.discoveryProfiles = new LinkedHashSet<>(Arrays.asList(DiscoveryProfile.ANS_DNSAID));
+            this.discoveryProfiles = new LinkedHashSet<>();
         }
         this.discoveryProfiles.add(discoveryProfilesItem);
         return this;
@@ -324,7 +323,7 @@ public class AgentRegistrationRequest {
      */
     @Nullable
     @JsonProperty(value = JSON_PROPERTY_DISCOVERY_PROFILES, required = false)
-    @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+    @JsonInclude(value = JsonInclude.Include.NON_EMPTY)
     public Set<DiscoveryProfile> getDiscoveryProfiles() {
         return discoveryProfiles;
     }

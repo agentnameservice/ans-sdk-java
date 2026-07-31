@@ -2,9 +2,7 @@ package com.godaddy.ans.sdk.registration;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.godaddy.ans.sdk.auth.AnsCredentials;
 import com.godaddy.ans.sdk.config.AnsConfiguration;
@@ -163,31 +161,6 @@ class AnsApiClient {
     String serializeToJson(Object object) {
         try {
             return objectMapper.writeValueAsString(object);
-        } catch (IOException e) {
-            throw new AnsServerException("Failed to serialize request: " + e.getMessage(), 0, e, null);
-        }
-    }
-
-    /**
-     * Serializes an object to JSON with the named top-level field removed.
-     *
-     * <p>Used to strip v2-only fields (e.g. {@code discoveryProfiles}) from the
-     * wire body when targeting the v1 lane, without mutating the caller's object.
-     * Operates on the JSON tree and reuses this client's {@link ObjectMapper}.</p>
-     *
-     * @param object the object to serialize
-     * @param fieldName the top-level field to remove
-     * @return the JSON string without the named field
-     * @throws AnsServerException if serialization fails
-     */
-    String serializeToJsonWithoutField(Object object, String fieldName) {
-        try {
-            JsonNode tree = objectMapper.valueToTree(object);
-            if (tree instanceof ObjectNode objectNode) {
-                objectNode.remove(fieldName);
-            }
-
-            return objectMapper.writeValueAsString(tree);
         } catch (IOException e) {
             throw new AnsServerException("Failed to serialize request: " + e.getMessage(), 0, e, null);
         }

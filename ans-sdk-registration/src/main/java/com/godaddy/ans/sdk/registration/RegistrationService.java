@@ -7,11 +7,13 @@ import com.godaddy.ans.sdk.model.AgentRegistrationRequest;
 import com.godaddy.ans.sdk.model.AgentRevocationRequest;
 import com.godaddy.ans.sdk.model.AgentRevocationResponse;
 import com.godaddy.ans.sdk.model.AgentStatus;
+import com.godaddy.ans.sdk.model.DiscoveryProfile;
 import com.godaddy.ans.sdk.model.Link;
 import com.godaddy.ans.sdk.model.RegistrationPending;
 
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -35,10 +37,12 @@ class RegistrationService {
      * the 'self' link is followed instead (HATEOAS).</p>
      */
     AgentDetails register(AgentRegistrationRequest request) {
-        // discoveryProfiles is a v2-only field; strip it from the wire body on v1.
-        String requestBody = (apiVersion == ApiVersion.V1)
-            ? httpClient.serializeToJsonWithoutField(request, "discoveryProfiles")
-            : httpClient.serializeToJson(request);
+        // discoveryProfiles is a v2-only field. The v1 lane ignores it server-side, so an
+        // explicit selection on v1 is a client misconfiguration: reject it rather than drop
+        // it silently. An empty set (the default) carries no selection and is omitted on the wire.
+        rejectDiscoveryProfilesOnV1(request);
+
+        String requestBody = httpClient.serializeToJson(request);
 
         HttpRequest httpRequest = httpClient.createRequestBuilder(AgentPaths.registerPath(apiVersion))
             .POST(HttpRequest.BodyPublishers.ofString(requestBody))
@@ -48,6 +52,25 @@ class RegistrationService {
         RegistrationPending pending = httpClient.parseResponse(response.body(), RegistrationPending.class);
 
         return getAgentDetails(resolveAgentDetailsPath(pending));
+    }
+
+    /**
+     * Rejects a discoveryProfiles selection on the v1 lane.
+     *
+     * <p>discoveryProfiles is a v2-only field. The v1 lane ignores it server-side, so an
+     * explicit selection is a client misconfiguration. The default (empty) set carries no
+     * selection and is allowed on either lane.</p>
+     */
+    private void rejectDiscoveryProfilesOnV1(AgentRegistrationRequest request) {
+        if (apiVersion != ApiVersion.V1) {
+            return;
+        }
+        Set<DiscoveryProfile> profiles = request.getDiscoveryProfiles();
+        if (profiles != null && !profiles.isEmpty()) {
+            throw new IllegalArgumentException(
+                "discoveryProfiles requires ApiVersion.V2; the v1 lane ignores the field. "
+                + "Remove the profile selection or build the client with ApiVersion.V2.");
+        }
     }
 
     /**

@@ -126,6 +126,28 @@ class ApiVersionRoutingTest {
     }
 
     @Test
+    @DisplayName("v1 register allows null discoveryProfiles")
+    void v1RegisterAllowsNullDiscoveryProfiles(WireMockRuntimeInfo wm) {
+        stubFor(post(urlEqualTo("/v1/agents/register"))
+                .willReturn(aResponse()
+                        .withStatus(202)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(v1PendingWithSelfLink())));
+
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(agentDetails())));
+
+        v1Client(wm).registerAgent(sampleRequest().discoveryProfiles(null));
+
+        verify(postRequestedFor(urlEqualTo("/v1/agents/register"))
+                .withRequestBody(containing("\"agentDisplayName\":\"Test Agent\""))
+                .withRequestBody(matchingJsonPath("$.discoveryProfiles", absent())));
+    }
+
+    @Test
     @DisplayName("v1 register throws when self link href is null")
     void shouldThrowWhenSelfLinkHrefIsNull(WireMockRuntimeInfo wm) {
         stubFor(post(urlEqualTo("/v1/agents/register"))

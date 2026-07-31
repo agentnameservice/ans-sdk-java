@@ -235,6 +235,33 @@ class RegistrationClientTest {
     }
 
     @Test
+    @DisplayName("v2 register allows null discoveryProfiles")
+    void v2RegisterAllowsNullDiscoveryProfiles(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(post(urlEqualTo("/v2/ans/agents"))
+                .willReturn(aResponse().withStatus(202)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(registrationPendingResponse())));
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID))
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(agentDetailsResponse())));
+
+        RegistrationClient client = RegistrationClient.builder()
+                .environment(Environment.OTE)
+                .baseUrl(baseUrl)
+                .credentialsProvider(new JwtCredentialsProvider(TEST_JWT_TOKEN))
+                .build();
+
+        client.registerAgent(sampleRegistrationRequest()
+                .discoveryProfiles(null));
+
+        verify(postRequestedFor(urlEqualTo("/v2/ans/agents"))
+                .withRequestBody(matchingJsonPath("$.discoveryProfiles", absent())));
+    }
+
+    @Test
     @DisplayName("Should throw AnsValidationException on 422")
     void shouldThrowValidationExceptionOn422(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();

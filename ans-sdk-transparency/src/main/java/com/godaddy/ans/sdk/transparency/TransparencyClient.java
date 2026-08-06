@@ -2,9 +2,11 @@ package com.godaddy.ans.sdk.transparency;
 
 import com.godaddy.ans.sdk.concurrent.AnsExecutors;
 import com.godaddy.ans.sdk.transparency.model.AgentAuditParams;
+import com.godaddy.ans.sdk.transparency.model.AgentIdentitiesResponse;
 import com.godaddy.ans.sdk.transparency.model.CheckpointHistoryParams;
 import com.godaddy.ans.sdk.transparency.model.CheckpointHistoryResponse;
 import com.godaddy.ans.sdk.transparency.model.CheckpointResponse;
+import com.godaddy.ans.sdk.transparency.model.IdentityLinkedAgentsResponse;
 import com.godaddy.ans.sdk.transparency.model.TransparencyLog;
 import com.godaddy.ans.sdk.transparency.model.TransparencyLogAudit;
 import com.godaddy.ans.sdk.transparency.scitt.RefreshDecision;
@@ -218,6 +220,138 @@ public final class TransparencyClient implements AutoCloseable {
         return service.getStatusToken(agentId);
     }
 
+    // ==================== Verified-Identity Reads (Sync) ====================
+
+    /**
+     * Retrieves the identity badge for a verified identity.
+     *
+     * <p>The badge is the latest sealed identity event plus its computed status
+     * ({@code VERIFIED} or {@code REVOKED}), served in the same shape as an agent
+     * transparency log entry. Read the status with {@link TransparencyLog#getStatus()}.</p>
+     *
+     * @param identityId the identity's unique identifier
+     * @return the identity badge
+     * @throws com.godaddy.ans.sdk.exception.AnsNotFoundException if the identity is not found
+     */
+    public TransparencyLog getIdentityBadge(String identityId) {
+        return service.getIdentityBadge(identityId);
+    }
+
+    /**
+     * Retrieves a paginated list of transparency log records for an identity.
+     *
+     * @param identityId the identity's unique identifier
+     * @param params optional pagination parameters (limit, offset)
+     * @return the audit records
+     * @throws com.godaddy.ans.sdk.exception.AnsNotFoundException if the identity is not found
+     */
+    public TransparencyLogAudit getIdentityAudit(String identityId, AgentAuditParams params) {
+        return service.getIdentityAudit(identityId, params);
+    }
+
+    /**
+     * Retrieves all transparency log records for an identity.
+     *
+     * @param identityId the identity's unique identifier
+     * @return the audit records
+     */
+    public TransparencyLogAudit getIdentityAudit(String identityId) {
+        return getIdentityAudit(identityId, null);
+    }
+
+    /**
+     * Retrieves the SCITT receipt for an identity's latest sealed event.
+     *
+     * <p>A {@code 503 TL_LEAF_UNCOMMITTED} response is a transient, retryable condition.
+     * The SDK surfaces it as {@link TlLeafUncommittedException} carrying the server's
+     * {@code Retry-After} delay, not as a hard error.</p>
+     *
+     * @param identityId the identity's unique identifier
+     * @return the raw receipt bytes (COSE_Sign1)
+     * @throws TlLeafUncommittedException if the receipt is not yet available (retryable)
+     * @throws com.godaddy.ans.sdk.exception.AnsNotFoundException if the identity is not found
+     */
+    public byte[] getIdentityReceipt(String identityId) {
+        return service.getIdentityReceipt(identityId);
+    }
+
+    /**
+     * Retrieves the reverse join for an identity: the agents it currently links to.
+     *
+     * <p>Each agent carries its own computed badge status, so a reader checks both ends of the
+     * link in one response. The result is paginated. Use {@link IdentityLinkedAgentsResponse#getTotal()}
+     * for the full count before pagination.</p>
+     *
+     * @param identityId the identity's unique identifier
+     * @param params optional pagination parameters (limit, offset)
+     * @return the linked agents plus the full count
+     * @throws com.godaddy.ans.sdk.exception.AnsNotFoundException if the identity is not found
+     */
+    public IdentityLinkedAgentsResponse getIdentityLinkedAgents(String identityId, AgentAuditParams params) {
+        return service.getIdentityLinkedAgents(identityId, params);
+    }
+
+    /**
+     * Retrieves all agents an identity currently links to.
+     *
+     * @param identityId the identity's unique identifier
+     * @return the linked agents plus the full count
+     */
+    public IdentityLinkedAgentsResponse getIdentityLinkedAgents(String identityId) {
+        return getIdentityLinkedAgents(identityId, null);
+    }
+
+    /**
+     * Retrieves the forward join for an agent: the identities it currently links to.
+     *
+     * <p>This is the overflow read target for the agent badge, which caps its inline
+     * {@code identities[]} at 25 entries. Use {@link AgentIdentitiesResponse#getTotal()} for the
+     * full count before pagination.</p>
+     *
+     * @param agentId the agent's unique identifier
+     * @param params optional pagination parameters (limit, offset)
+     * @return the linked identities plus the full count
+     * @throws com.godaddy.ans.sdk.exception.AnsNotFoundException if the agent is not found
+     */
+    public AgentIdentitiesResponse getAgentIdentities(String agentId, AgentAuditParams params) {
+        return service.getAgentIdentities(agentId, params);
+    }
+
+    /**
+     * Retrieves all identities an agent currently links to.
+     *
+     * @param agentId the agent's unique identifier
+     * @return the linked identities plus the full count
+     */
+    public AgentIdentitiesResponse getAgentIdentities(String agentId) {
+        return getAgentIdentities(agentId, null);
+    }
+
+    /**
+     * Retrieves the identity link history for an agent.
+     *
+     * <p>This is the audit trail of link and unlink events for the agent, in the same
+     * {@code {records}} envelope as the agent and identity audit trails.</p>
+     *
+     * @param agentId the agent's unique identifier
+     * @param params optional pagination parameters (limit, offset)
+     * @return the history records
+     * @throws com.godaddy.ans.sdk.exception.AnsNotFoundException if the agent is not found
+     */
+    public TransparencyLogAudit getAgentIdentityHistory(String agentId, AgentAuditParams params) {
+        return service.getAgentIdentityHistory(agentId, params);
+    }
+
+    /**
+     * Retrieves the full identity link history for an agent.
+     *
+     * @param agentId the agent's unique identifier
+     * @return the history records
+     */
+    public TransparencyLogAudit getAgentIdentityHistory(String agentId) {
+        return getAgentIdentityHistory(agentId, null);
+    }
+
     /**
      * Invalidates the cached root public keys.
      *
@@ -334,6 +468,21 @@ public final class TransparencyClient implements AutoCloseable {
      */
     public CompletableFuture<byte[]> getStatusTokenAsync(String agentId) {
         return service.getStatusTokenAsync(agentId);
+    }
+
+    /**
+     * Retrieves the SCITT receipt for an identity's latest sealed event asynchronously.
+     *
+     * <p>This method uses non-blocking I/O and does not occupy a thread pool
+     * thread during the HTTP request. As with the sync variant, a
+     * {@code 503 TL_LEAF_UNCOMMITTED} response completes the future exceptionally
+     * with a {@link TlLeafUncommittedException} carrying the {@code Retry-After} delay.</p>
+     *
+     * @param identityId the identity's unique identifier
+     * @return a CompletableFuture with the raw receipt bytes (COSE_Sign1)
+     */
+    public CompletableFuture<byte[]> getIdentityReceiptAsync(String identityId) {
+        return service.getIdentityReceiptAsync(identityId);
     }
 
     /**

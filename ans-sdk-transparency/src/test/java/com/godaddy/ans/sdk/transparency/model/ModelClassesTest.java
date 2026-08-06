@@ -1,5 +1,6 @@
 package com.godaddy.ans.sdk.transparency.model;
 
+import com.godaddy.ans.sdk.model.LinkedIdentity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -1008,5 +1009,270 @@ class ModelClassesTest {
 
         assertThat(params.getOffset()).isEqualTo(10);
         assertThat(params.getLimit()).isEqualTo(25);
+    }
+
+    @Test
+    @DisplayName("LinkedAgentView getters, setters, and toString should work")
+    void linkedAgentViewGettersAndSettersWork() {
+        LinkedAgentView view = new LinkedAgentView();
+
+        view.setAnsId("ans://v1.0.0.agent.example.com");
+        view.setLinkedAt("2026-08-04T12:00:00Z");
+        view.setAgentStatus("ACTIVE");
+
+        assertThat(view.getAnsId()).isEqualTo("ans://v1.0.0.agent.example.com");
+        assertThat(view.getLinkedAt()).isEqualTo("2026-08-04T12:00:00Z");
+        assertThat(view.getAgentStatus()).isEqualTo("ACTIVE");
+        assertThat(view.toString())
+            .contains("ans://v1.0.0.agent.example.com")
+            .contains("ACTIVE");
+    }
+
+    @Test
+    @DisplayName("IdentityLinkedAgentsResponse getters, setters, and toString should work")
+    void identityLinkedAgentsResponseGettersAndSettersWork() {
+        LinkedAgentView view = new LinkedAgentView();
+        view.setAnsId("ans://v1.0.0.agent.example.com");
+
+        IdentityLinkedAgentsResponse response = new IdentityLinkedAgentsResponse();
+        response.setAgents(List.of(view));
+        response.setTotal(5);
+
+        assertThat(response.getAgents()).hasSize(1);
+        assertThat(response.getAgents().get(0).getAnsId()).isEqualTo("ans://v1.0.0.agent.example.com");
+        assertThat(response.getTotal()).isEqualTo(5);
+        assertThat(response.toString())
+            .contains("agents=1")
+            .contains("total=5");
+    }
+
+    @Test
+    @DisplayName("IdentityLinkedAgentsResponse toString should handle null agents")
+    void identityLinkedAgentsResponseToStringHandlesNullAgents() {
+        IdentityLinkedAgentsResponse response = new IdentityLinkedAgentsResponse();
+
+        assertThat(response.getAgents()).isNull();
+        assertThat(response.toString()).contains("agents=0");
+    }
+
+    @Test
+    @DisplayName("AgentIdentitiesResponse getters, setters, and toString should work")
+    void agentIdentitiesResponseGettersAndSettersWork() {
+        LinkedIdentity identity = new LinkedIdentity()
+            .identityId("id-1")
+            .kind(LinkedIdentity.KindEnum.DID_WEB)
+            .value("did:web:example.com")
+            .identityStatus(LinkedIdentity.IdentityStatusEnum.VERIFIED);
+
+        AgentIdentitiesResponse response = new AgentIdentitiesResponse();
+        response.setIdentities(List.of(identity));
+        response.setTotal(3);
+
+        assertThat(response.getIdentities()).hasSize(1);
+        assertThat(response.getIdentities().get(0).getIdentityId()).isEqualTo("id-1");
+        assertThat(response.getTotal()).isEqualTo(3);
+        assertThat(response.toString())
+            .contains("identities=1")
+            .contains("total=3");
+    }
+
+    @Test
+    @DisplayName("AgentIdentitiesResponse toString should handle null identities")
+    void agentIdentitiesResponseToStringHandlesNullIdentities() {
+        AgentIdentitiesResponse response = new AgentIdentitiesResponse();
+
+        assertThat(response.getIdentities()).isNull();
+        assertThat(response.toString()).contains("identities=0");
+    }
+
+    // ==================== V2 Model Classes ====================
+
+    @Test
+    @DisplayName("DnsRecordV2 getters, setters, and toString should work")
+    void dnsRecordV2GettersAndSettersWork() {
+        DnsRecordV2 record = new DnsRecordV2();
+        record.setName("agent.example.com");
+        record.setType("SVCB");
+        record.setData("1 . alpn=mcp port=443");
+
+        assertThat(record.getName()).isEqualTo("agent.example.com");
+        assertThat(record.getType()).isEqualTo("SVCB");
+        assertThat(record.getData()).isEqualTo("1 . alpn=mcp port=443");
+        assertThat(record.toString()).contains("agent.example.com").contains("SVCB");
+    }
+
+    @Test
+    @DisplayName("CertificateInfoV2 getters, setters, and toString should work")
+    void certificateInfoV2GettersAndSettersWork() {
+        OffsetDateTime notAfter = OffsetDateTime.now().plusYears(1);
+        CertificateInfoV2 info = new CertificateInfoV2();
+        info.setFingerprint("SHA256:abc123");
+        info.setNotAfter(notAfter);
+        info.setType(CertType.X509_OV_CLIENT);
+
+        assertThat(info.getFingerprint()).isEqualTo("SHA256:abc123");
+        assertThat(info.getNotAfter()).isEqualTo(notAfter);
+        assertThat(info.getType()).isEqualTo(CertType.X509_OV_CLIENT);
+        assertThat(info.toString()).contains("SHA256:abc123").contains("X509_OV_CLIENT");
+    }
+
+    @Test
+    @DisplayName("AttestationsV2 getters, setters, and toString should work")
+    void attestationsV2GettersAndSettersWork() {
+        AttestationsV2 attestations = new AttestationsV2();
+        DnsRecordV2 dns = new DnsRecordV2();
+        CertificateInfoV2 identityCert = new CertificateInfoV2();
+        identityCert.setFingerprint("SHA256:identity");
+        CertificateInfoV2 serverCert = new CertificateInfoV2();
+        serverCert.setFingerprint("SHA256:server");
+
+        attestations.setDomainValidation("ACME-DNS-01");
+        attestations.setDnsRecordsProvisioned(List.of(dns));
+        attestations.setIdentityCerts(List.of(identityCert));
+        attestations.setServerCerts(List.of(serverCert));
+
+        assertThat(attestations.getDomainValidation()).isEqualTo("ACME-DNS-01");
+        assertThat(attestations.getDnsRecordsProvisioned()).containsExactly(dns);
+        assertThat(attestations.getIdentityCerts()).containsExactly(identityCert);
+        assertThat(attestations.getServerCerts()).containsExactly(serverCert);
+        assertThat(attestations.toString()).contains("ACME-DNS-01");
+    }
+
+    @Test
+    @DisplayName("EventV2 getters, setters, and toString should work")
+    void eventV2GettersAndSettersWork() {
+        EventV2 event = new EventV2();
+        AgentV1 agent = new AgentV1();
+        AttestationsV2 attestations = new AttestationsV2();
+        OffsetDateTime now = OffsetDateTime.now();
+
+        event.setAnsId("ans-123");
+        event.setAnsName("ans://v1.0.0.agent.example");
+        event.setEventType(EventTypeV1.AGENT_REGISTERED);
+        event.setAgent(agent);
+        event.setAttestations(attestations);
+        event.setIssuedAt(now);
+        event.setExpiresAt(now.plusYears(1));
+        event.setRaId("ans-ra-local");
+        event.setRenewalStatus("valid");
+        event.setRevocationReasonCode(RevocationReason.KEY_COMPROMISE);
+        event.setRevokedAt(now);
+        event.setTimestamp(now);
+
+        assertThat(event.getAnsId()).isEqualTo("ans-123");
+        assertThat(event.getAnsName()).isEqualTo("ans://v1.0.0.agent.example");
+        assertThat(event.getEventType()).isEqualTo(EventTypeV1.AGENT_REGISTERED);
+        assertThat(event.getAgent()).isSameAs(agent);
+        assertThat(event.getAttestations()).isSameAs(attestations);
+        assertThat(event.getIssuedAt()).isEqualTo(now);
+        assertThat(event.getExpiresAt()).isEqualTo(now.plusYears(1));
+        assertThat(event.getRaId()).isEqualTo("ans-ra-local");
+        assertThat(event.getRenewalStatus()).isEqualTo("valid");
+        assertThat(event.getRevocationReasonCode()).isEqualTo(RevocationReason.KEY_COMPROMISE);
+        assertThat(event.getRevokedAt()).isEqualTo(now);
+        assertThat(event.getTimestamp()).isEqualTo(now);
+        assertThat(event.toString()).contains("ans-123");
+    }
+
+    @Test
+    @DisplayName("ProducerV2 getters, setters, and toString should work")
+    void producerV2GettersAndSettersWork() {
+        ProducerV2 producer = new ProducerV2();
+        EventV2 event = new EventV2();
+
+        producer.setEvent(event);
+        producer.setKeyId("key-123");
+        producer.setSignature("sig-456");
+
+        assertThat(producer.getEvent()).isSameAs(event);
+        assertThat(producer.getKeyId()).isEqualTo("key-123");
+        assertThat(producer.getSignature()).isEqualTo("sig-456");
+        assertThat(producer.toString()).contains("key-123");
+    }
+
+    @Test
+    @DisplayName("TransparencyLogV2 convenience methods should extract from producer event")
+    void transparencyLogV2ConvenienceMethodsWork() {
+        TransparencyLogV2 log = new TransparencyLogV2();
+        ProducerV2 producer = new ProducerV2();
+        EventV2 event = new EventV2();
+        AttestationsV2 attestations = new AttestationsV2();
+        event.setEventType(EventTypeV1.AGENT_REGISTERED);
+        event.setAnsName("ans://v1.0.0.agent.example");
+        event.setAttestations(attestations);
+        producer.setEvent(event);
+        log.setLogId("log-v2-123");
+        log.setProducer(producer);
+
+        assertThat(log.getLogId()).isEqualTo("log-v2-123");
+        assertThat(log.getProducer()).isSameAs(producer);
+        assertThat(log.getEvent()).isSameAs(event);
+        assertThat(log.getEventType()).isEqualTo(EventTypeV1.AGENT_REGISTERED);
+        assertThat(log.getAnsName()).isEqualTo("ans://v1.0.0.agent.example");
+        assertThat(log.getAttestations()).isSameAs(attestations);
+        assertThat(log.toString()).contains("log-v2-123");
+    }
+
+    @Test
+    @DisplayName("TransparencyLogV2 convenience methods return null when no producer")
+    void transparencyLogV2ConvenienceMethodsReturnNullWhenNoProducer() {
+        TransparencyLogV2 log = new TransparencyLogV2();
+
+        assertThat(log.getEvent()).isNull();
+        assertThat(log.getEventType()).isNull();
+        assertThat(log.getAnsName()).isNull();
+        assertThat(log.getAttestations()).isNull();
+    }
+
+    @Test
+    @DisplayName("TransparencyLog convenience methods should work for V2")
+    void transparencyLogConvenienceMethodsShouldWorkForV2() {
+        TransparencyLog log = new TransparencyLog();
+        log.setSchemaVersion("V2");
+
+        TransparencyLogV2 v2 = new TransparencyLogV2();
+        ProducerV2 producer = new ProducerV2();
+        EventV2 event = new EventV2();
+        AgentV1 agent = new AgentV1();
+        agent.setHost("agent.example.com");
+        AttestationsV2 attestations = new AttestationsV2();
+        CertificateInfoV2 serverCert = new CertificateInfoV2();
+        serverCert.setFingerprint("SHA256:server");
+        CertificateInfoV2 identityCert = new CertificateInfoV2();
+        identityCert.setFingerprint("SHA256:identity");
+        attestations.setServerCerts(List.of(serverCert));
+        attestations.setIdentityCerts(List.of(identityCert));
+        event.setAgent(agent);
+        event.setAttestations(attestations);
+        event.setAnsName("ans://v1.0.0.agent.example");
+        producer.setEvent(event);
+        v2.setProducer(producer);
+        log.setParsedPayload(v2);
+
+        assertThat(log.isV2()).isTrue();
+        assertThat(log.isV1()).isFalse();
+        assertThat(log.isV0()).isFalse();
+        assertThat(log.getV2Payload()).isSameAs(v2);
+        assertThat(log.getServerCertFingerprint()).isEqualTo("SHA256:server");
+        assertThat(log.getIdentityCertFingerprint()).isEqualTo("SHA256:identity");
+        assertThat(log.getAgentHost()).isEqualTo("agent.example.com");
+        assertThat(log.getAnsName()).isEqualTo("ans://v1.0.0.agent.example");
+    }
+
+    @Test
+    @DisplayName("TransparencyLog V2 fingerprint getters return null for empty cert lists")
+    void transparencyLogV2FingerprintNullForEmptyCertLists() {
+        TransparencyLog log = new TransparencyLog();
+        TransparencyLogV2 v2 = new TransparencyLogV2();
+        ProducerV2 producer = new ProducerV2();
+        EventV2 event = new EventV2();
+        event.setAttestations(new AttestationsV2());
+        producer.setEvent(event);
+        v2.setProducer(producer);
+        log.setParsedPayload(v2);
+
+        assertThat(log.isV2()).isTrue();
+        assertThat(log.getServerCertFingerprint()).isNull();
+        assertThat(log.getIdentityCertFingerprint()).isNull();
     }
 }

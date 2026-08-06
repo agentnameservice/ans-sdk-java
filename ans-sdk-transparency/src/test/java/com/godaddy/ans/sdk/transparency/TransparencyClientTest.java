@@ -1,11 +1,17 @@
 package com.godaddy.ans.sdk.transparency;
 
+import com.github.tomakehurst.wiremock.http.Fault;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import com.godaddy.ans.sdk.exception.AnsNotFoundException;
+import com.godaddy.ans.sdk.exception.AnsServerException;
+import com.godaddy.ans.sdk.model.LinkedIdentity;
 import com.godaddy.ans.sdk.transparency.model.AgentAuditParams;
+import com.godaddy.ans.sdk.transparency.model.AgentIdentitiesResponse;
 import com.godaddy.ans.sdk.transparency.model.CheckpointResponse;
 import com.godaddy.ans.sdk.transparency.model.EventTypeV1;
+import com.godaddy.ans.sdk.transparency.model.IdentityLinkedAgentsResponse;
+import com.godaddy.ans.sdk.transparency.model.LinkedAgentView;
 import com.godaddy.ans.sdk.transparency.model.TransparencyLog;
 import com.godaddy.ans.sdk.transparency.model.CheckpointHistoryParams;
 import com.godaddy.ans.sdk.transparency.model.CheckpointHistoryResponse;
@@ -19,7 +25,12 @@ import org.junit.jupiter.api.Test;
 
 import java.security.PublicKey;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
@@ -79,6 +90,59 @@ class TransparencyClientTest {
         assertThat(result.getIdentityCertFingerprint()).isEqualTo("SHA256:e5f6g7h8");
         assertThat(result.getAnsName()).isEqualTo("ans://v1.0.0.agent.example.com");
         assertThat(result.getAgentHost()).isEqualTo("agent.example.com");
+    }
+
+    @Test
+    @DisplayName("Agent badge exposes the computed identities[] join with overflow total")
+    void getAgentBadgeExposesLinkedIdentities(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withHeader("X-Schema-Version", "V1")
+                .withBody(v1BadgeWithIdentitiesResponse())));
+
+        TransparencyClient client = TransparencyClient.builder()
+            .baseUrl(baseUrl)
+            .build();
+
+        TransparencyLog result = client.getAgentTransparencyLog(TEST_AGENT_ID);
+
+        assertThat(result.getIdentities()).hasSize(2);
+        LinkedIdentity first = result.getIdentities().get(0);
+        assertThat(first.getIdentityId()).isEqualTo("id-web-1");
+        assertThat(first.getKind()).isEqualTo(LinkedIdentity.KindEnum.DID_WEB);
+        assertThat(first.getIdentityStatus()).isEqualTo(LinkedIdentity.IdentityStatusEnum.VERIFIED);
+        assertThat(result.getIdentities().get(1).getIdentityStatus())
+            .isEqualTo(LinkedIdentity.IdentityStatusEnum.REVOKED);
+        // Embedded list is capped. The full count signals the getAgentIdentities overflow read.
+        assertThat(result.getIdentitiesTotal()).isEqualTo(27);
+        assertThat(result.getIdentitiesUnavailable()).isNull();
+    }
+
+    @Test
+    @DisplayName("Agent badge without an identities field leaves identities null, no NPE")
+    void getAgentBadgeAbsentIdentitiesIsNull(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withHeader("X-Schema-Version", "V1")
+                .withBody(v1TransparencyLogResponse())));
+
+        TransparencyClient client = TransparencyClient.builder()
+            .baseUrl(baseUrl)
+            .build();
+
+        TransparencyLog result = client.getAgentTransparencyLog(TEST_AGENT_ID);
+
+        assertThat(result.getIdentities()).isNull();
+        assertThat(result.getIdentitiesTotal()).isNull();
+        assertThat(result.getIdentitiesUnavailable()).isNull();
     }
 
     @Test
@@ -826,6 +890,596 @@ class TransparencyClientTest {
         assertThat(oteClient.getBaseUrl()).isEqualTo("https://transparency.ans.ote-godaddy.com");
     }
 
+    // ==================== Verified-Identity Reads ====================
+
+    private static final String TEST_IDENTITY_ID = "id-9c2f1a0b-7e44-4d21-bb90-1f2e3d4c5a6b";
+
+    @Test
+    @DisplayName("Should retrieve identity badge with computed status")
+    void shouldRetrieveIdentityBadge(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"status\": \"VERIFIED\", \"payload\": {\"identityId\": \"" + TEST_IDENTITY_ID + "\"}}")));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        TransparencyLog result = client.getIdentityBadge(TEST_IDENTITY_ID);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getStatus()).isEqualTo("VERIFIED");
+        assertThat(result.getPayload()).containsEntry("identityId", TEST_IDENTITY_ID);
+    }
+
+    @Test
+    @DisplayName("Should throw AnsServerException when identity badge body is invalid")
+    void shouldThrowWhenIdentityBadgeBodyInvalid(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("not-json")));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getIdentityBadge(TEST_IDENTITY_ID))
+            .isInstanceOf(com.godaddy.ans.sdk.exception.AnsServerException.class)
+            .hasMessageContaining("Failed to parse identity badge response");
+    }
+
+    @Test
+    @DisplayName("Should retrieve identity audit with pagination params")
+    void shouldRetrieveIdentityAuditWithParams(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/audit?offset=5&limit=20"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(auditResponse())));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        TransparencyLogAudit audit = client.getIdentityAudit(
+            TEST_IDENTITY_ID, AgentAuditParams.builder().offset(5).limit(20).build());
+
+        assertThat(audit).isNotNull();
+        assertThat(audit.getRecords()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("Should retrieve identity audit without params using overload")
+    void shouldRetrieveIdentityAuditWithoutParams(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/audit"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(auditResponse())));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        TransparencyLogAudit audit = client.getIdentityAudit(TEST_IDENTITY_ID);
+
+        assertThat(audit).isNotNull();
+        assertThat(audit.getRecords()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("Should throw AnsServerException when identity audit body is invalid")
+    void shouldThrowWhenIdentityAuditBodyInvalid(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/audit"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("not-json")));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getIdentityAudit(TEST_IDENTITY_ID))
+            .isInstanceOf(com.godaddy.ans.sdk.exception.AnsServerException.class)
+            .hasMessageContaining("Failed to parse identity audit response");
+    }
+
+    @Test
+    @DisplayName("Should retrieve identity linked agents with pagination params")
+    void shouldRetrieveIdentityLinkedAgentsWithParams(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/agents?limit=50"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(linkedAgentsResponse())));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        IdentityLinkedAgentsResponse response = client.getIdentityLinkedAgents(
+            TEST_IDENTITY_ID, AgentAuditParams.builder().limit(50).build());
+
+        assertThat(response).isNotNull();
+        assertThat(response.getTotal()).isEqualTo(2);
+        assertThat(response.getAgents()).hasSize(1);
+        LinkedAgentView view = response.getAgents().get(0);
+        assertThat(view.getAnsId()).isEqualTo("ans://v1.0.0.agent.example.com");
+        assertThat(view.getLinkedAt()).isEqualTo("2026-08-04T12:00:00Z");
+        assertThat(view.getAgentStatus()).isEqualTo("ACTIVE");
+    }
+
+    @Test
+    @DisplayName("Should retrieve identity linked agents without params using overload")
+    void shouldRetrieveIdentityLinkedAgentsWithoutParams(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/agents"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(linkedAgentsResponse())));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        IdentityLinkedAgentsResponse response = client.getIdentityLinkedAgents(TEST_IDENTITY_ID);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getTotal()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("Should throw AnsServerException when linked-agents body is invalid")
+    void shouldThrowWhenLinkedAgentsBodyInvalid(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/agents"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("not-json")));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getIdentityLinkedAgents(TEST_IDENTITY_ID))
+            .isInstanceOf(com.godaddy.ans.sdk.exception.AnsServerException.class)
+            .hasMessageContaining("Failed to parse identity linked-agents response");
+    }
+
+    @Test
+    @DisplayName("Should retrieve agent identities forward join with pagination params")
+    void shouldRetrieveAgentIdentitiesWithParams(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/identities?limit=50"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(agentIdentitiesResponse())));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        AgentIdentitiesResponse response = client.getAgentIdentities(
+            TEST_AGENT_ID, AgentAuditParams.builder().limit(50).build());
+
+        assertThat(response).isNotNull();
+        assertThat(response.getTotal()).isEqualTo(2);
+        assertThat(response.getIdentities()).hasSize(1);
+        LinkedIdentity identity = response.getIdentities().get(0);
+        assertThat(identity.getIdentityId()).isEqualTo(TEST_IDENTITY_ID);
+        assertThat(identity.getKind()).isEqualTo(LinkedIdentity.KindEnum.DID_WEB);
+        assertThat(identity.getValue()).isEqualTo("did:web:example.com");
+        assertThat(identity.getIdentityStatus()).isEqualTo(LinkedIdentity.IdentityStatusEnum.VERIFIED);
+        assertThat(identity.getLinkedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Should retrieve agent identities without params using overload")
+    void shouldRetrieveAgentIdentitiesWithoutParams(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/identities"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(agentIdentitiesResponse())));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        AgentIdentitiesResponse response = client.getAgentIdentities(TEST_AGENT_ID);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getTotal()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("Should tolerate an absent identities list without NPE (V10 overflow envelope)")
+    void shouldTolerateAbsentAgentIdentitiesList(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/identities"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"total\": 0}")));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        AgentIdentitiesResponse response = client.getAgentIdentities(TEST_AGENT_ID);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getTotal()).isZero();
+        assertThat(response.getIdentities()).isNull();
+        assertThat(response.toString()).contains("identities=0");
+    }
+
+    @Test
+    @DisplayName("Should throw AnsServerException when agent identities body is invalid")
+    void shouldThrowWhenAgentIdentitiesBodyInvalid(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/identities"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("not-json")));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getAgentIdentities(TEST_AGENT_ID))
+            .isInstanceOf(com.godaddy.ans.sdk.exception.AnsServerException.class)
+            .hasMessageContaining("Failed to parse agent identities response");
+    }
+
+    @Test
+    @DisplayName("Should retrieve agent identity history with pagination params")
+    void shouldRetrieveAgentIdentityHistoryWithParams(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/identities/history?offset=5&limit=20"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(auditResponse())));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        TransparencyLogAudit history = client.getAgentIdentityHistory(
+            TEST_AGENT_ID, AgentAuditParams.builder().offset(5).limit(20).build());
+
+        assertThat(history).isNotNull();
+        assertThat(history.getRecords()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("Should retrieve agent identity history without params using overload")
+    void shouldRetrieveAgentIdentityHistoryWithoutParams(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/identities/history"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(auditResponse())));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        TransparencyLogAudit history = client.getAgentIdentityHistory(TEST_AGENT_ID);
+
+        assertThat(history).isNotNull();
+        assertThat(history.getRecords()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("Should throw AnsServerException when agent identity history body is invalid")
+    void shouldThrowWhenAgentIdentityHistoryBodyInvalid(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/identities/history"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("not-json")));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getAgentIdentityHistory(TEST_AGENT_ID))
+            .isInstanceOf(com.godaddy.ans.sdk.exception.AnsServerException.class)
+            .hasMessageContaining("Failed to parse agent identity history response");
+    }
+
+    @Test
+    @DisplayName("Should retrieve identity receipt bytes")
+    void shouldRetrieveIdentityReceipt(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+        byte[] receiptBytes = {0x01, 0x02, 0x03, 0x04};
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/receipt"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/scitt-receipt+cose")
+                .withBody(receiptBytes)));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        byte[] result = client.getIdentityReceipt(TEST_IDENTITY_ID);
+
+        assertThat(result).containsExactly(receiptBytes);
+    }
+
+    @Test
+    @DisplayName("Should throw retryable TlLeafUncommittedException on 503 with Retry-After")
+    void shouldThrowTlLeafUncommittedWithRetryAfter(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/receipt"))
+            .willReturn(aResponse()
+                .withStatus(503)
+                .withHeader("Retry-After", "30")
+                .withHeader("X-Request-Id", "req-abc-123")
+                .withBody("{\"code\": \"TL_LEAF_UNCOMMITTED\"}")));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getIdentityReceipt(TEST_IDENTITY_ID))
+            .isInstanceOf(TlLeafUncommittedException.class)
+            .satisfies(t -> {
+                TlLeafUncommittedException ex = (TlLeafUncommittedException) t;
+                assertThat(ex.getRetryAfterSeconds()).isEqualTo(30);
+                assertThat(ex.getRequestId()).isEqualTo("req-abc-123");
+                assertThat(ex.isRetryable()).isTrue();
+                assertThat(ex.getStatusCode()).isEqualTo(503);
+            });
+    }
+
+    @Test
+    @DisplayName("Should default Retry-After to 0 when header is absent or unparseable")
+    void shouldDefaultRetryAfterWhenHeaderMissing(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/receipt"))
+            .willReturn(aResponse()
+                .withStatus(503)
+                .withHeader("Retry-After", "not-a-number")
+                .withBody("{\"code\": \"TL_LEAF_UNCOMMITTED\"}")));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getIdentityReceipt(TEST_IDENTITY_ID))
+            .isInstanceOf(TlLeafUncommittedException.class)
+            .satisfies(t -> assertThat(((TlLeafUncommittedException) t).getRetryAfterSeconds()).isZero());
+    }
+
+    @Test
+    @DisplayName("Should throw AnsNotFoundException when identity receipt is 404")
+    void shouldThrowNotFoundForIdentityReceipt(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/receipt"))
+            .willReturn(aResponse()
+                .withStatus(404)
+                .withBody("{\"message\": \"identity not found\"}")));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getIdentityReceipt(TEST_IDENTITY_ID))
+            .isInstanceOf(AnsNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("Should treat a 503 without the TL_LEAF_UNCOMMITTED code as a plain server error")
+    void shouldNotMapUnrelated503ToLeafUncommitted(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/receipt"))
+            .willReturn(aResponse()
+                .withStatus(503)
+                .withHeader("Retry-After", "5")
+                .withBody("{\"code\": \"SERVICE_UNAVAILABLE\"}")));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getIdentityReceipt(TEST_IDENTITY_ID))
+            .isInstanceOf(AnsServerException.class)
+            .isNotInstanceOf(TlLeafUncommittedException.class);
+    }
+
+    @Test
+    @DisplayName("Should parse an HTTP-date Retry-After into a positive delay")
+    void shouldParseHttpDateRetryAfter(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+        String httpDate = DateTimeFormatter.RFC_1123_DATE_TIME
+            .format(Instant.now().plusSeconds(120).atZone(ZoneOffset.UTC));
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/receipt"))
+            .willReturn(aResponse()
+                .withStatus(503)
+                .withHeader("Retry-After", httpDate)
+                .withBody("{\"code\": \"TL_LEAF_UNCOMMITTED\"}")));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getIdentityReceipt(TEST_IDENTITY_ID))
+            .isInstanceOf(TlLeafUncommittedException.class)
+            .satisfies(t -> assertThat(((TlLeafUncommittedException) t).getRetryAfterSeconds())
+                .isGreaterThan(0));
+    }
+
+    @Test
+    @DisplayName("Should retrieve identity receipt bytes asynchronously")
+    void shouldRetrieveIdentityReceiptAsync(WireMockRuntimeInfo wmRuntimeInfo) throws Exception {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+        byte[] receiptBytes = {0x0a, 0x0b, 0x0c};
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/receipt"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/scitt-receipt+cose")
+                .withBody(receiptBytes)));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        CompletableFuture<byte[]> future = client.getIdentityReceiptAsync(TEST_IDENTITY_ID);
+
+        assertThat(future.get()).containsExactly(receiptBytes);
+    }
+
+    @Test
+    @DisplayName("Should complete exceptionally with TlLeafUncommittedException on async 503")
+    void shouldCompleteExceptionallyOnAsyncLeafUncommitted(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/receipt"))
+            .willReturn(aResponse()
+                .withStatus(503)
+                .withHeader("Retry-After", "15")
+                .withBody("{\"code\": \"TL_LEAF_UNCOMMITTED\"}")));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        CompletableFuture<byte[]> future = client.getIdentityReceiptAsync(TEST_IDENTITY_ID);
+
+        assertThatThrownBy(future::get)
+            .isInstanceOf(ExecutionException.class)
+            .hasCauseInstanceOf(TlLeafUncommittedException.class);
+    }
+
+    @Test
+    @DisplayName("Should default Retry-After to 0 when the header is absent")
+    void shouldDefaultRetryAfterWhenHeaderAbsent(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/receipt"))
+            .willReturn(aResponse()
+                .withStatus(503)
+                .withBody("{\"code\": \"TL_LEAF_UNCOMMITTED\"}")));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getIdentityReceipt(TEST_IDENTITY_ID))
+            .isInstanceOf(TlLeafUncommittedException.class)
+            .satisfies(t -> assertThat(((TlLeafUncommittedException) t).getRetryAfterSeconds()).isZero());
+    }
+
+    @Test
+    @DisplayName("Should clamp a past HTTP-date Retry-After to 0")
+    void shouldClampPastHttpDateRetryAfterToZero(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+        String pastDate = DateTimeFormatter.RFC_1123_DATE_TIME
+            .format(Instant.now().minusSeconds(120).atZone(ZoneOffset.UTC));
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/receipt"))
+            .willReturn(aResponse()
+                .withStatus(503)
+                .withHeader("Retry-After", pastDate)
+                .withBody("{\"code\": \"TL_LEAF_UNCOMMITTED\"}")));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getIdentityReceipt(TEST_IDENTITY_ID))
+            .isInstanceOf(TlLeafUncommittedException.class)
+            .satisfies(t -> assertThat(((TlLeafUncommittedException) t).getRetryAfterSeconds()).isZero());
+    }
+
+    // ==================== Network-error mapping ====================
+
+    @Test
+    @DisplayName("getIdentityReceipt maps a transport failure to AnsServerException")
+    void shouldWrapNetworkErrorForIdentityReceipt(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID + "/receipt"))
+            .willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getIdentityReceipt(TEST_IDENTITY_ID))
+            .isInstanceOf(AnsServerException.class)
+            .hasMessageContaining("Network error");
+    }
+
+    @Test
+    @DisplayName("getReceipt maps a transport failure to AnsServerException")
+    void shouldWrapNetworkErrorForReceipt(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID + "/receipt"))
+            .willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getReceipt(TEST_AGENT_ID))
+            .isInstanceOf(AnsServerException.class)
+            .hasMessageContaining("Network error");
+    }
+
+    @Test
+    @DisplayName("getAgentTransparencyLog maps a transport failure to AnsServerException")
+    void shouldWrapNetworkErrorForAgentTransparencyLog(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID))
+            .willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getAgentTransparencyLog(TEST_AGENT_ID))
+            .isInstanceOf(AnsServerException.class)
+            .hasMessageContaining("Network error");
+    }
+
+    @Test
+    @DisplayName("getIdentityBadge maps a transport failure to AnsServerException")
+    void shouldWrapNetworkErrorForSendRequest(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/identities/" + TEST_IDENTITY_ID))
+            .willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
+
+        TransparencyClient client = TransparencyClient.builder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> client.getIdentityBadge(TEST_IDENTITY_ID))
+            .isInstanceOf(AnsServerException.class)
+            .hasMessageContaining("Network error");
+    }
+
+    private String linkedAgentsResponse() {
+        return """
+            {
+              "agents": [
+                {
+                  "ansId": "ans://v1.0.0.agent.example.com",
+                  "linkedAt": "2026-08-04T12:00:00Z",
+                  "agentStatus": "ACTIVE"
+                }
+              ],
+              "total": 2
+            }
+            """;
+    }
+
+    private String agentIdentitiesResponse() {
+        return """
+            {
+              "identities": [
+                {
+                  "identityId": "%s",
+                  "kind": "did:web",
+                  "value": "did:web:example.com",
+                  "identityStatus": "VERIFIED",
+                  "linkedAt": "2026-08-04T12:00:00Z"
+                }
+              ],
+              "total": 2
+            }
+            """.formatted(TEST_IDENTITY_ID);
+    }
+
     // ==================== Test Data ====================
 
     private String v1TransparencyLogResponse() {
@@ -866,6 +1520,48 @@ class TransparencyClientTest {
                 }
               },
               "signature": "eyJhbGci..."
+            }
+            """;
+    }
+
+    private String v1BadgeWithIdentitiesResponse() {
+        // Agent badge with the top-level computed identities[] join. The entries carry TL-view-only
+        // fields (keys/keysLogId) that LinkedIdentity does not model — they must be ignored, not fail.
+        return """
+            {
+              "status": "ACTIVE",
+              "schemaVersion": "V1",
+              "payload": {
+                "logId": "log-123",
+                "producer": {
+                  "event": {
+                    "ansName": "ans://v1.0.0.agent.example.com",
+                    "eventType": "AGENT_REGISTERED",
+                    "agent": { "host": "agent.example.com", "name": "Example Agent", "version": "v1.0.0" }
+                  },
+                  "keyId": "key-1",
+                  "signature": "sig123"
+                }
+              },
+              "signature": "eyJhbGci...",
+              "identities": [
+                {
+                  "identityId": "id-web-1",
+                  "kind": "did:web",
+                  "value": "did:web:example.com",
+                  "identityStatus": "VERIFIED",
+                  "linkedAt": "2026-01-01T00:00:00Z",
+                  "keys": [{ "kty": "OKP" }],
+                  "keysLogId": "keys-log-1"
+                },
+                {
+                  "identityId": "id-lei-1",
+                  "kind": "lei",
+                  "value": "5493001KJTIIGC8Y1R12",
+                  "identityStatus": "REVOKED"
+                }
+              ],
+              "identitiesTotal": 27
             }
             """;
     }

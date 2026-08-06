@@ -18,6 +18,7 @@ import com.godaddy.ans.sdk.model.AgentRevocationRequest;
 import com.godaddy.ans.sdk.model.AgentRevocationResponse;
 import com.godaddy.ans.sdk.model.AgentStatus;
 import com.godaddy.ans.sdk.model.DiscoveryProfile;
+import com.godaddy.ans.sdk.model.LinkedIdentity;
 import com.godaddy.ans.sdk.model.Protocol;
 import com.godaddy.ans.sdk.model.RegistrationPending;
 import com.godaddy.ans.sdk.model.RevocationReason;
@@ -550,6 +551,59 @@ class RegistrationClientTest {
     }
 
     @Test
+    @DisplayName("getAgent with identities[] absent yields an empty list, never null")
+    void getAgentAbsentIdentitiesYieldsEmptyList(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        // agentDetailsResponse() carries no identities field.
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(agentDetailsResponse())));
+
+        RegistrationClient client = RegistrationClient.builder()
+            .environment(Environment.OTE)
+            .baseUrl(baseUrl)
+            .credentialsProvider(new JwtCredentialsProvider(TEST_JWT_TOKEN))
+            .build();
+
+        AgentDetails result = client.getAgent(TEST_AGENT_ID);
+
+        assertThat(result.getIdentities()).isNotNull().isEmpty();
+    }
+
+    @Test
+    @DisplayName("getAgent surfaces the computed identities[] join when present")
+    void getAgentWithIdentitiesRoundTrips(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v2/ans/agents/" + TEST_AGENT_ID))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(agentDetailsWithIdentitiesResponse())));
+
+        RegistrationClient client = RegistrationClient.builder()
+            .environment(Environment.OTE)
+            .baseUrl(baseUrl)
+            .credentialsProvider(new JwtCredentialsProvider(TEST_JWT_TOKEN))
+            .build();
+
+        AgentDetails result = client.getAgent(TEST_AGENT_ID);
+
+        assertThat(result.getIdentities()).hasSize(2);
+        LinkedIdentity first = result.getIdentities().get(0);
+        assertThat(first.getIdentityId()).isEqualTo("id-web-1");
+        assertThat(first.getKind()).isEqualTo(LinkedIdentity.KindEnum.DID_WEB);
+        assertThat(first.getValue()).isEqualTo("did:web:example.com");
+        assertThat(first.getIdentityStatus()).isEqualTo(LinkedIdentity.IdentityStatusEnum.VERIFIED);
+        LinkedIdentity second = result.getIdentities().get(1);
+        assertThat(second.getKind()).isEqualTo(LinkedIdentity.KindEnum.LEI);
+        assertThat(second.getIdentityStatus()).isEqualTo(LinkedIdentity.IdentityStatusEnum.REVOKED);
+    }
+
+    @Test
     @DisplayName("Should throw AnsNotFoundException when agent not found")
     void shouldThrowNotFoundExceptionWhenAgentNotFound(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
@@ -835,7 +889,7 @@ class RegistrationClientTest {
     void shouldThrowWhenV2RegistrationMissingAgentId(WireMockRuntimeInfo wmRuntimeInfo) {
         String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
 
-        // v2 resolves via agentId, not the self link; a response without it is a server error.
+        // v2 resolves via agentId, not the self link. A response without it is a server error.
         stubFor(post(urlEqualTo("/v2/ans/agents"))
             .willReturn(aResponse()
                 .withStatus(202)
@@ -956,6 +1010,41 @@ class RegistrationClientTest {
                     {
                         "rel": "self",
                         "href": "/v1/agents/550e8400-e29b-41d4-a716-446655440000"
+                    }
+                ]
+            }
+            """;
+    }
+
+    private String agentDetailsWithIdentitiesResponse() {
+        return """
+            {
+                "agentId": "550e8400-e29b-41d4-a716-446655440000",
+                "agentDisplayName": "Test Agent",
+                "version": "1.0.0",
+                "agentHost": "test-agent.example.com",
+                "ansName": "ans://v1.0.0.test-agent.example.com",
+                "agentStatus": "ACTIVE",
+                "endpoints": [
+                    {
+                        "protocol": "A2A",
+                        "agentUrl": "https://test-agent.example.com/a2a"
+                    }
+                ],
+                "links": [],
+                "identities": [
+                    {
+                        "identityId": "id-web-1",
+                        "kind": "did:web",
+                        "value": "did:web:example.com",
+                        "identityStatus": "VERIFIED",
+                        "linkedAt": "2026-01-01T00:00:00Z"
+                    },
+                    {
+                        "identityId": "id-lei-1",
+                        "kind": "lei",
+                        "value": "5493001KJTIIGC8Y1R12",
+                        "identityStatus": "REVOKED"
                     }
                 ]
             }

@@ -139,13 +139,148 @@ class IdentityServiceTest {
             .willReturn(aResponse()
                 .withStatus(202)
                 .withHeader("Content-Type", "application/json")
-                .withBody("{\"identityId\": \"" + IDENTITY_ID + "\"}")));
+                .withBody("""
+                    {
+                        "identityId": "%s",
+                        "kind": "did:web",
+                        "value": "did:web:example.com",
+                        "status": "PENDING_CONTROL",
+                        "expiresAt": "2026-01-01T00:00:00Z",
+                        "challenges": []
+                    }
+                    """.formatted(IDENTITY_ID))));
 
         IdentityRegistrationRequest request = new IdentityRegistrationRequest().value("did:web:example.com");
 
         assertThatThrownBy(() -> createIdentityService(wmRuntimeInfo).register(request))
             .isInstanceOf(AnsServerException.class)
             .hasMessageContaining("nonce");
+    }
+
+    @Test
+    @DisplayName("register throws AnsServerException when the challenge omits expiresAt")
+    void registerRejectsMissingExpiresAt(WireMockRuntimeInfo wmRuntimeInfo) {
+        stubFor(post(urlEqualTo(COLLECTION))
+            .willReturn(aResponse()
+                .withStatus(202)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "identityId": "%s",
+                        "kind": "did:web",
+                        "value": "did:web:example.com",
+                        "status": "PENDING_CONTROL",
+                        "nonce": "dGVzdC1ub25jZQ",
+                        "challenges": []
+                    }
+                    """.formatted(IDENTITY_ID))));
+
+        IdentityRegistrationRequest request = new IdentityRegistrationRequest().value("did:web:example.com");
+
+        assertThatThrownBy(() -> createIdentityService(wmRuntimeInfo).register(request))
+            .isInstanceOf(AnsServerException.class)
+            .hasMessageContaining("expiresAt");
+    }
+
+    @Test
+    @DisplayName("register throws AnsServerException when the challenge omits kind")
+    void registerRejectsMissingKind(WireMockRuntimeInfo wmRuntimeInfo) {
+        stubFor(post(urlEqualTo(COLLECTION))
+            .willReturn(aResponse()
+                .withStatus(202)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "identityId": "%s",
+                        "value": "did:web:example.com",
+                        "status": "PENDING_CONTROL",
+                        "nonce": "dGVzdC1ub25jZQ",
+                        "expiresAt": "2026-01-01T00:00:00Z",
+                        "challenges": []
+                    }
+                    """.formatted(IDENTITY_ID))));
+
+        IdentityRegistrationRequest request = new IdentityRegistrationRequest().value("did:web:example.com");
+
+        assertThatThrownBy(() -> createIdentityService(wmRuntimeInfo).register(request))
+            .isInstanceOf(AnsServerException.class)
+            .hasMessageContaining("kind");
+    }
+
+    @Test
+    @DisplayName("register throws AnsServerException when the challenge omits value")
+    void registerRejectsMissingValue(WireMockRuntimeInfo wmRuntimeInfo) {
+        stubFor(post(urlEqualTo(COLLECTION))
+            .willReturn(aResponse()
+                .withStatus(202)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "identityId": "%s",
+                        "kind": "did:web",
+                        "status": "PENDING_CONTROL",
+                        "nonce": "dGVzdC1ub25jZQ",
+                        "expiresAt": "2026-01-01T00:00:00Z",
+                        "challenges": []
+                    }
+                    """.formatted(IDENTITY_ID))));
+
+        IdentityRegistrationRequest request = new IdentityRegistrationRequest().value("did:web:example.com");
+
+        assertThatThrownBy(() -> createIdentityService(wmRuntimeInfo).register(request))
+            .isInstanceOf(AnsServerException.class)
+            .hasMessageContaining("value");
+    }
+
+    @Test
+    @DisplayName("register throws AnsServerException when the challenge omits status")
+    void registerRejectsMissingStatus(WireMockRuntimeInfo wmRuntimeInfo) {
+        stubFor(post(urlEqualTo(COLLECTION))
+            .willReturn(aResponse()
+                .withStatus(202)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "identityId": "%s",
+                        "kind": "did:web",
+                        "value": "did:web:example.com",
+                        "nonce": "dGVzdC1ub25jZQ",
+                        "expiresAt": "2026-01-01T00:00:00Z",
+                        "challenges": []
+                    }
+                    """.formatted(IDENTITY_ID))));
+
+        IdentityRegistrationRequest request = new IdentityRegistrationRequest().value("did:web:example.com");
+
+        assertThatThrownBy(() -> createIdentityService(wmRuntimeInfo).register(request))
+            .isInstanceOf(AnsServerException.class)
+            .hasMessageContaining("status");
+    }
+
+    @Test
+    @DisplayName("register throws AnsServerException when the challenge sets challenges null")
+    void registerRejectsNullChallenges(WireMockRuntimeInfo wmRuntimeInfo) {
+        stubFor(post(urlEqualTo(COLLECTION))
+            .willReturn(aResponse()
+                .withStatus(202)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "identityId": "%s",
+                        "kind": "did:web",
+                        "value": "did:web:example.com",
+                        "status": "PENDING_CONTROL",
+                        "nonce": "dGVzdC1ub25jZQ",
+                        "expiresAt": "2026-01-01T00:00:00Z",
+                        "challenges": null
+                    }
+                    """.formatted(IDENTITY_ID))));
+
+        IdentityRegistrationRequest request = new IdentityRegistrationRequest().value("did:web:example.com");
+
+        assertThatThrownBy(() -> createIdentityService(wmRuntimeInfo).register(request))
+            .isInstanceOf(AnsServerException.class)
+            .hasMessageContaining("challenges");
     }
 
     @Test
@@ -260,7 +395,16 @@ class IdentityServiceTest {
             .willReturn(aResponse()
                 .withStatus(202)
                 .withHeader("Content-Type", "application/json")
-                .withBody("{\"identityId\": \"" + IDENTITY_ID + "\"}")));
+                .withBody("""
+                    {
+                        "identityId": "%s",
+                        "kind": "did:web",
+                        "value": "did:web:example.com",
+                        "status": "PENDING_CONTROL",
+                        "expiresAt": "2026-01-01T00:00:00Z",
+                        "challenges": []
+                    }
+                    """.formatted(IDENTITY_ID))));
 
         IdentityRegistrationRequest request = new IdentityRegistrationRequest().value("did:web:example.com");
 

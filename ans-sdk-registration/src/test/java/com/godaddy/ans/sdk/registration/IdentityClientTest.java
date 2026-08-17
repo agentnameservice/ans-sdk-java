@@ -217,7 +217,16 @@ class IdentityClientTest {
                 .willReturn(aResponse()
                         .withStatus(202)
                         .withHeader("Content-Type", "application/json")
-                        .withBody("{\"identityId\":\"" + TEST_IDENTITY_ID + "\"}")));
+                        .withBody("""
+                            {
+                                "identityId": "%s",
+                                "kind": "did:web",
+                                "value": "did:web:example.com",
+                                "status": "PENDING_CONTROL",
+                                "expiresAt": "2026-01-01T00:00:00Z",
+                                "challenges": []
+                            }
+                            """.formatted(TEST_IDENTITY_ID))));
 
         IdentityClient client = client(baseUrl);
 

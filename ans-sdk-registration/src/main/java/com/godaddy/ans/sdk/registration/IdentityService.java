@@ -182,20 +182,37 @@ class IdentityService {
      * Parses a 202 challenge body and guards against missing required fields.
      *
      * <p>Jackson does not enforce {@code required} on deserialization, so a
-     * malformed response can leave {@code identityId} or {@code nonce} null.
-     * Such a response cannot drive the verify-control round and is a server fault.</p>
+     * malformed response can leave any {@code @Nonnull} field null. A response
+     * that omits one cannot drive the verify-control round and is a server
+     * fault. Every required field is checked here so callers never receive a
+     * partially-populated challenge and hit a deferred {@link NullPointerException}
+     * at a getter call site.</p>
      */
     private IdentityChallengeResponse parseChallenge(String body) {
         IdentityChallengeResponse challenge =
             httpClient.parseResponse(body, IdentityChallengeResponse.class);
 
-        if (challenge.getIdentityId() == null) {
-            throw new AnsServerException("Identity challenge response missing 'identityId'", 0, null);
-        }
-        if (challenge.getNonce() == null) {
-            throw new AnsServerException("Identity challenge response missing 'nonce'", 0, null);
-        }
+        requireField(challenge.getIdentityId(), "identityId");
+        requireField(challenge.getKind(), "kind");
+        requireField(challenge.getValue(), "value");
+        requireField(challenge.getStatus(), "status");
+        requireField(challenge.getNonce(), "nonce");
+        requireField(challenge.getExpiresAt(), "expiresAt");
+        requireField(challenge.getChallenges(), "challenges");
         return challenge;
+    }
+
+    /**
+     * Rejects a challenge response that omits a required field.
+     *
+     * @param value the deserialized field value
+     * @param name the JSON property name, used in the error message
+     * @throws AnsServerException if {@code value} is null
+     */
+    private void requireField(Object value, String name) {
+        if (value == null) {
+            throw new AnsServerException("Identity challenge response missing '" + name + "'", 0, null);
+        }
     }
 
     /**

@@ -184,6 +184,9 @@ public final class IdentityClient {
     /**
      * Registers a new identity asynchronously.
      *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see {@link #registerIdentity} for the causes.</p>
+     *
      * @param request the registration request
      * @return a CompletableFuture with the challenge round
      */
@@ -193,6 +196,9 @@ public final class IdentityClient {
 
     /**
      * Lists the caller's identities asynchronously.
+     *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see {@link #listIdentities} for the causes.</p>
      *
      * @param limit optional page size (1..100), or {@code null} for the server default
      * @param cursor optional opaque page cursor, or {@code null} for the first page
@@ -205,6 +211,9 @@ public final class IdentityClient {
     /**
      * Gets the full details for a single identity asynchronously.
      *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see {@link #getIdentity} for the causes.</p>
+     *
      * @param identityId the identity ID
      * @return a CompletableFuture with the identity details
      */
@@ -214,6 +223,9 @@ public final class IdentityClient {
 
     /**
      * Rotates the key material for an identity asynchronously.
+     *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see {@link #rotateIdentity} for the causes.</p>
      *
      * @param identityId the identity ID to rotate
      * @param request the rotation request
@@ -228,6 +240,9 @@ public final class IdentityClient {
     /**
      * Submits a control proof for an identity asynchronously.
      *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see {@link #verifyControl} for the causes.</p>
+     *
      * @param identityId the identity ID
      * @param request the control-proof request
      * @return a CompletableFuture with the updated identity details
@@ -239,6 +254,9 @@ public final class IdentityClient {
     /**
      * Revokes an identity asynchronously.
      *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see {@link #revokeIdentity} for the causes.</p>
+     *
      * @param identityId the identity ID to revoke
      * @return a CompletableFuture with the updated identity details
      */
@@ -248,6 +266,9 @@ public final class IdentityClient {
 
     /**
      * Links an identity to one or more agents asynchronously.
+     *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see {@link #linkAgents} for the causes.</p>
      *
      * @param identityId the identity ID
      * @param request the link request carrying 1..256 agent IDs
@@ -259,6 +280,9 @@ public final class IdentityClient {
 
     /**
      * Removes the link between an identity and a single agent asynchronously.
+     *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see {@link #unlinkAgent} for the causes.</p>
      *
      * @param identityId the identity ID
      * @param agentId the linked agent ID to remove

@@ -1,5 +1,6 @@
 package com.godaddy.ans.sdk.transparency.model;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.godaddy.ans.sdk.model.LinkedIdentity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -1085,6 +1086,65 @@ class ModelClassesTest {
         assertThat(response.toString()).contains("identities=0");
     }
 
+    @Test
+    @DisplayName("TransparencyLog exposes keys and keysLogId, round-tripping through JSON")
+    void transparencyLogExposesKeysAndKeysLogId() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        String json = """
+            {
+              "status": "ACTIVE",
+              "keys": [{ "kty": "OKP", "crv": "Ed25519" }],
+              "keysLogId": "keys-log-42"
+            }
+            """;
+
+        TransparencyLog parsed = mapper.readValue(json, TransparencyLog.class);
+        assertThat(parsed.getKeys()).hasSize(1);
+        assertThat(parsed.getKeys().get(0)).containsEntry("kty", "OKP").containsEntry("crv", "Ed25519");
+        assertThat(parsed.getKeysLogId()).isEqualTo("keys-log-42");
+
+        TransparencyLog back = mapper.readValue(mapper.writeValueAsString(parsed), TransparencyLog.class);
+        assertThat(back.getKeys()).isEqualTo(parsed.getKeys());
+        assertThat(back.getKeysLogId()).isEqualTo("keys-log-42");
+    }
+
+    @Test
+    @DisplayName("LinkedIdentityView carries keys, keysLogId, and linkLogId, round-tripping through JSON")
+    void linkedIdentityViewRoundTrip() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        String json = """
+            {
+              "identityId": "id-web-1",
+              "kind": "did:web",
+              "value": "did:web:example.com",
+              "identityStatus": "VERIFIED",
+              "linkedAt": "2026-01-01T00:00:00Z",
+              "keys": [{ "kty": "OKP", "crv": "Ed25519" }],
+              "keysLogId": "keys-log-1",
+              "linkLogId": "link-log-1"
+            }
+            """;
+
+        LinkedIdentityView parsed = mapper.readValue(json, LinkedIdentityView.class);
+        assertThat(parsed.getIdentityId()).isEqualTo("id-web-1");
+        assertThat(parsed.getKind()).isEqualTo("did:web");
+        assertThat(parsed.getValue()).isEqualTo("did:web:example.com");
+        assertThat(parsed.getIdentityStatus()).isEqualTo("VERIFIED");
+        assertThat(parsed.getLinkedAt()).isEqualTo("2026-01-01T00:00:00Z");
+        assertThat(parsed.getKeys()).hasSize(1);
+        assertThat(parsed.getKeys().get(0)).containsEntry("kty", "OKP");
+        assertThat(parsed.getKeysLogId()).isEqualTo("keys-log-1");
+        assertThat(parsed.getLinkLogId()).isEqualTo("link-log-1");
+
+        LinkedIdentityView back = mapper.readValue(mapper.writeValueAsString(parsed), LinkedIdentityView.class);
+        assertThat(back.getKeys()).isEqualTo(parsed.getKeys());
+        assertThat(back.getKeysLogId()).isEqualTo("keys-log-1");
+        assertThat(back.getLinkLogId()).isEqualTo("link-log-1");
+        assertThat(back.toString()).contains("id-web-1");
+    }
+
     // ==================== V2 Model Classes ====================
 
     @Test
@@ -1092,13 +1152,51 @@ class ModelClassesTest {
     void dnsRecordV2GettersAndSettersWork() {
         DnsRecordV2 record = new DnsRecordV2();
         record.setName("agent.example.com");
-        record.setType("SVCB");
-        record.setData("1 . alpn=mcp port=443");
+        record.setType("TLSA");
+        record.setData("3 1 1 abc");
+        record.setDnssecVerified(true);
 
         assertThat(record.getName()).isEqualTo("agent.example.com");
-        assertThat(record.getType()).isEqualTo("SVCB");
-        assertThat(record.getData()).isEqualTo("1 . alpn=mcp port=443");
-        assertThat(record.toString()).contains("agent.example.com").contains("SVCB");
+        assertThat(record.getType()).isEqualTo("TLSA");
+        assertThat(record.getData()).isEqualTo("3 1 1 abc");
+        assertThat(record.getDnssecVerified()).isTrue();
+        assertThat(record.toString())
+            .contains("agent.example.com")
+            .contains("TLSA")
+            .contains("dnssecVerified=true");
+    }
+
+    @Test
+    @DisplayName("DnsRecordV2 exposes dnssecVerified, round-tripping through JSON")
+    void dnsRecordV2ExposesDnssecVerified() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        DnsRecordV2 parsed = mapper.readValue(
+            "{\"name\":\"agent.example.com\",\"type\":\"TLSA\",\"data\":\"3 1 1 abc\",\"dnssecVerified\":true}",
+            DnsRecordV2.class);
+        assertThat(parsed.getDnssecVerified()).isTrue();
+
+        DnsRecordV2 back = mapper.readValue(mapper.writeValueAsString(parsed), DnsRecordV2.class);
+        assertThat(back.getDnssecVerified()).isTrue();
+
+        // omitempty on the producer wire: absent field parses to null, not false.
+        DnsRecordV2 absent = mapper.readValue("{\"name\":\"a\",\"type\":\"TLSA\"}", DnsRecordV2.class);
+        assertThat(absent.getDnssecVerified()).isNull();
+    }
+
+    @Test
+    @DisplayName("DnsRecordV2 DNS payload wire key is 'data', never 'value'")
+    void dnsRecordV2WireKeyIsData() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        DnsRecordV2 record = new DnsRecordV2();
+        record.setData("3 1 1 abc");
+        String serialized = mapper.writeValueAsString(record);
+        assertThat(serialized).contains("\"data\"").doesNotContain("\"value\"");
+
+        // The producer emits "data"; a "value" rename would always deserialize null.
+        DnsRecordV2 parsed = mapper.readValue("{\"data\":\"3 1 1 abc\"}", DnsRecordV2.class);
+        assertThat(parsed.getData()).isEqualTo("3 1 1 abc");
     }
 
     @Test

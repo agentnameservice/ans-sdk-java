@@ -21,6 +21,9 @@ public class DnsRecordV2 {
     @JsonProperty("type")
     private String type;
 
+    @JsonProperty("dnssecVerified")
+    private Boolean dnssecVerified;
+
     public DnsRecordV2() {
     }
 
@@ -48,12 +51,27 @@ public class DnsRecordV2 {
         this.type = type;
     }
 
+    /**
+     * Returns the DNSSEC authenticated-data signal for this TLSA binding — true when the record was
+     * resolved over a DNSSEC-validated chain.
+     *
+     * @return the DNSSEC-verified flag, or null when not provided
+     */
+    public Boolean getDnssecVerified() {
+        return dnssecVerified;
+    }
+
+    public void setDnssecVerified(Boolean dnssecVerified) {
+        this.dnssecVerified = dnssecVerified;
+    }
+
     @Override
     public String toString() {
         return "DnsRecordV2{"
             + "name='" + name + '\''
             + ", type='" + type + '\''
             + ", data='" + data + '\''
+            + ", dnssecVerified=" + dnssecVerified
             + '}';
     }
 }

@@ -3,7 +3,6 @@ package com.godaddy.ans.sdk.transparency.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.godaddy.ans.sdk.model.LinkedIdentity;
 
 import java.util.List;
 import java.util.Map;
@@ -34,13 +33,19 @@ public class TransparencyLog {
     private String status;
 
     @JsonProperty("identities")
-    private List<LinkedIdentity> identities;
+    private List<LinkedIdentityView> identities;
 
     @JsonProperty("identitiesTotal")
     private Integer identitiesTotal;
 
     @JsonProperty("identitiesUnavailable")
     private Boolean identitiesUnavailable;
+
+    @JsonProperty("keys")
+    private List<Map<String, Object>> keys;
+
+    @JsonProperty("keysLogId")
+    private String keysLogId;
 
     /**
      * The strongly-typed payload based on schema version.
@@ -104,11 +109,11 @@ public class TransparencyLog {
      * @return the linked identities, or null when the response carried no {@code identities} field
      *         (identity badges, or an agent with no visible links)
      */
-    public List<LinkedIdentity> getIdentities() {
+    public List<LinkedIdentityView> getIdentities() {
         return identities;
     }
 
-    public void setIdentities(List<LinkedIdentity> identities) {
+    public void setIdentities(List<LinkedIdentityView> identities) {
         this.identities = identities;
     }
 
@@ -137,6 +142,33 @@ public class TransparencyLog {
 
     public void setIdentitiesUnavailable(Boolean identitiesUnavailable) {
         this.identitiesUnavailable = identitiesUnavailable;
+    }
+
+    /**
+     * The CURRENT proven key set for an identity badge, quoted verbatim from the latest sealed proof
+     * event — verification methods only. Identity badges only.
+     *
+     * @return the proven key set, or null when not an identity badge / no keys present
+     */
+    public List<Map<String, Object>> getKeys() {
+        return keys;
+    }
+
+    public void setKeys(List<Map<String, Object>> keys) {
+        this.keys = keys;
+    }
+
+    /**
+     * The sealed proof event that {@link #getKeys()} is quoted from — fetch for signed-proof / offline evidence.
+     *
+     * @return the keys log id, or null when not an identity badge / no keys present
+     */
+    public String getKeysLogId() {
+        return keysLogId;
+    }
+
+    public void setKeysLogId(String keysLogId) {
+        this.keysLogId = keysLogId;
     }
 
     public Object getParsedPayload() {

@@ -12,6 +12,7 @@ import com.godaddy.ans.sdk.transparency.model.CheckpointResponse;
 import com.godaddy.ans.sdk.transparency.model.EventTypeV1;
 import com.godaddy.ans.sdk.transparency.model.IdentityLinkedAgentsResponse;
 import com.godaddy.ans.sdk.transparency.model.LinkedAgentView;
+import com.godaddy.ans.sdk.transparency.model.LinkedIdentityView;
 import com.godaddy.ans.sdk.transparency.model.TransparencyLog;
 import com.godaddy.ans.sdk.transparency.model.CheckpointHistoryParams;
 import com.godaddy.ans.sdk.transparency.model.CheckpointHistoryResponse;
@@ -111,12 +112,15 @@ class TransparencyClientTest {
         TransparencyLog result = client.getAgentTransparencyLog(TEST_AGENT_ID);
 
         assertThat(result.getIdentities()).hasSize(2);
-        LinkedIdentity first = result.getIdentities().get(0);
+        LinkedIdentityView first = result.getIdentities().get(0);
         assertThat(first.getIdentityId()).isEqualTo("id-web-1");
-        assertThat(first.getKind()).isEqualTo(LinkedIdentity.KindEnum.DID_WEB);
-        assertThat(first.getIdentityStatus()).isEqualTo(LinkedIdentity.IdentityStatusEnum.VERIFIED);
-        assertThat(result.getIdentities().get(1).getIdentityStatus())
-            .isEqualTo(LinkedIdentity.IdentityStatusEnum.REVOKED);
+        assertThat(first.getKind()).isEqualTo("did:web");
+        assertThat(first.getIdentityStatus()).isEqualTo("VERIFIED");
+        // TL-view-only per-link material now flows through instead of being dropped.
+        assertThat(first.getKeys()).hasSize(1);
+        assertThat(first.getKeysLogId()).isEqualTo("keys-log-1");
+        assertThat(first.getLinkLogId()).isEqualTo("link-log-1");
+        assertThat(result.getIdentities().get(1).getIdentityStatus()).isEqualTo("REVOKED");
         // Embedded list is capped. The full count signals the getAgentIdentities overflow read.
         assertThat(result.getIdentitiesTotal()).isEqualTo(27);
         assertThat(result.getIdentitiesUnavailable()).isNull();
@@ -1552,7 +1556,8 @@ class TransparencyClientTest {
                   "identityStatus": "VERIFIED",
                   "linkedAt": "2026-01-01T00:00:00Z",
                   "keys": [{ "kty": "OKP" }],
-                  "keysLogId": "keys-log-1"
+                  "keysLogId": "keys-log-1",
+                  "linkLogId": "link-log-1"
                 },
                 {
                   "identityId": "id-lei-1",

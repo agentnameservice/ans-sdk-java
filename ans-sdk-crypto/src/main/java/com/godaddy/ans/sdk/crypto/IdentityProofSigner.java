@@ -155,7 +155,8 @@ public final class IdentityProofSigner {
                                        JWSHeader header, byte[] signingInputBytes) {
         try {
             if (JWSAlgorithm.EdDSA.equals(algorithm)) {
-                // Ed25519 JCA signatures are already the raw R||S form JOSE expects, no transcoding needed.
+                // Ed25519 JCA output is the raw 64-byte signature per RFC 8037 — no DER transcoding needed unlike
+                // ECDSA.
                 Signature signature = Signature.getInstance(ED25519);
                 signature.initSign(privateKey);
                 signature.update(signingInputBytes);
@@ -186,7 +187,15 @@ public final class IdentityProofSigner {
             if (!(publicKey instanceof EdECPublicKey)) {
                 throw new IllegalArgumentException("publicKey does not match the private key algorithm");
             }
-            byte[] encoded = publicKey.getEncoded();
+            EdECPublicKey edPublicKey = (EdECPublicKey) publicKey;
+            if (!ED25519.equals(edPublicKey.getParams().getName())) {
+                throw new IllegalArgumentException(
+                        "EdEC public key must use Ed25519 curve, got: " + edPublicKey.getParams().getName());
+            }
+            byte[] encoded = edPublicKey.getEncoded();
+            if (encoded == null) {
+                throw new IllegalArgumentException("EdEC public key encoding is not available");
+            }
             byte[] raw = Arrays.copyOfRange(encoded, encoded.length - ED25519_RAW_KEY_LEN, encoded.length);
             return new OctetKeyPair.Builder(Curve.Ed25519, Base64URL.encode(raw)).build();
         } catch (ClassCastException e) {

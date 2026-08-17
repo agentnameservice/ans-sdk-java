@@ -3,11 +3,15 @@ package com.godaddy.ans.sdk.crypto;
 import com.nimbusds.jose.JWSObject;
 import com.nimbusds.jose.crypto.ECDSAVerifier;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
+import com.nimbusds.jose.jwk.AsymmetricJWK;
+import com.nimbusds.jose.jwk.JWK;
+import com.nimbusds.jose.jwk.OctetKeyPair;
 import com.nimbusds.jose.util.Base64URL;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.PublicKey;
@@ -16,6 +20,7 @@ import java.security.Signature;
 import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.ECGenParameterSpec;
+import java.security.spec.X509EncodedKeySpec;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -120,6 +125,14 @@ class IdentityProofSignerTest {
     }
 
     @Test
+    void ed448PublicKeyWithEd25519PrivateThrows() throws Exception {
+        KeyPair ed25519 = gen("Ed25519");
+        PublicKey ed448Public = gen("Ed448").getPublic();
+        assertThatThrownBy(() -> signer.sign(SIGNING_INPUT, ed25519.getPrivate(), KID, ed448Public))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void x25519Throws() throws Exception {
         KeyPair kp = gen("X25519");
         assertThatThrownBy(() -> signer.sign(SIGNING_INPUT, kp.getPrivate(), KID))
@@ -178,10 +191,39 @@ class IdentityProofSignerTest {
 
         JWSObject parsed = JWSObject.parse(jws);
         assertThat(parsed.getHeader().getKeyID()).isEqualTo(KID);
-        assertThat(parsed.getHeader().getJWK()).isNotNull();
-        assertThat(parsed.getHeader().getJWK().isPrivate()).isFalse();
-        assertThat(verifies(parts, kp.getPublic())).isTrue();
+
+        JWK embeddedJwk = parsed.getHeader().getJWK();
+        assertThat(embeddedJwk).isNotNull();
+        assertThat(embeddedJwk.isPrivate()).isFalse();
+
+        // Verify against the key recovered from the embedded JWK, not the original key pair.
+        // This exercises toPublicJwk(): if it encoded the wrong key material, recovery yields a
+        // different key and verification fails.
+        PublicKey recoveredPublic = recoverPublicKey(embeddedJwk);
+        assertThat(verifies(parts, recoveredPublic)).isTrue();
     }
+
+    /**
+     * Rebuilds a JCA public key from the embedded JWK. RSA and EC use Nimbus directly. Ed25519 is
+     * reconstructed from its raw x-coordinate wrapped in a SubjectPublicKeyInfo, because Nimbus's
+     * OctetKeyPair.toPublicKey() pulls in an optional Tink dependency that is not on the classpath.
+     */
+    private PublicKey recoverPublicKey(JWK jwk) throws Exception {
+        if (jwk instanceof OctetKeyPair okp) {
+            byte[] raw = okp.getDecodedX();
+            byte[] spki = new byte[SPKI_ED25519_PREFIX.length + raw.length];
+            System.arraycopy(SPKI_ED25519_PREFIX, 0, spki, 0, SPKI_ED25519_PREFIX.length);
+            System.arraycopy(raw, 0, spki, SPKI_ED25519_PREFIX.length, raw.length);
+            return KeyFactory.getInstance("Ed25519").generatePublic(new X509EncodedKeySpec(spki));
+        }
+        return ((AsymmetricJWK) jwk).toPublicKey();
+    }
+
+    // DER prefix for an Ed25519 SubjectPublicKeyInfo: SEQUENCE / AlgorithmIdentifier(1.3.101.112)
+    // / BIT STRING, followed by the 32-byte raw public key.
+    private static final byte[] SPKI_ED25519_PREFIX = {
+        0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00
+    };
 
     /**
      * Verifies the compact JWS signature against the public key. RSA and EC use Nimbus verifiers.

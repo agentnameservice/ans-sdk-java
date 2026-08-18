@@ -82,4 +82,23 @@ class AgentDetailsTest {
         o.addIdentitiesItem(new LinkedIdentity());
         assertThat(o.getIdentities()).hasSize(1);
     }
+
+    @Test
+    void identitiesAbsentYieldsEmptyList() throws Exception {
+        // Absent identities[] deserializes to an empty list, never null.
+        String json = """
+            {
+                "agentId": "11111111-1111-1111-1111-111111111111",
+                "agentDisplayName": "x",
+                "version": "x",
+                "agentHost": "x",
+                "ansName": "x",
+                "agentStatus": "PENDING_VALIDATION",
+                "endpoints": [],
+                "links": []
+            }
+            """;
+        AgentDetails back = ModelTestSupport.mapper().readValue(json, AgentDetails.class);
+        assertThat(back.getIdentities()).isNotNull().isEmpty();
+    }
 }

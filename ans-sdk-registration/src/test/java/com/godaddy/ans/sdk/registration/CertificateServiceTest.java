@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @WireMockTest
 class CertificateServiceTest {
 
-    private static final String TEST_AGENT_ID = "test-agent-123";
+    private static final String TEST_AGENT_ID = "550e8400-e29b-41d4-a716-446655440000";
     private static final String API_KEY = "test-api-key";
     private static final String API_SECRET = "test-api-secret";
 

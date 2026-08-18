@@ -45,6 +45,7 @@ class RegistrationService {
         String requestBody = httpClient.serializeToJson(request);
 
         HttpRequest httpRequest = httpClient.createRequestBuilder(AgentPaths.registerPath(apiVersion))
+            .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(requestBody))
             .build();
 
@@ -155,6 +156,7 @@ class RegistrationService {
 
         HttpRequest httpRequest = httpClient.createRequestBuilder(
                 AgentPaths.agentPath(apiVersion, agentId, "revoke"))
+            .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(requestBody))
             .build();
 

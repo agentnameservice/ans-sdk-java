@@ -177,6 +177,9 @@ public final class RegistrationClient {
     /**
      * Registers a new agent asynchronously.
      *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see {@link #registerAgent} for the causes.</p>
+     *
      * @param request the registration request
      * @return a CompletableFuture with the agent details
      */
@@ -186,6 +189,9 @@ public final class RegistrationClient {
 
     /**
      * Triggers ACME domain validation asynchronously.
+     *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see {@link #verifyAcme} for the causes.</p>
      *
      * @param agentId the agent ID
      * @return a CompletableFuture with the updated agent status
@@ -197,6 +203,9 @@ public final class RegistrationClient {
     /**
      * Verifies DNS records asynchronously.
      *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see {@link #verifyDns} for the causes.</p>
+     *
      * @param agentId the agent ID
      * @return a CompletableFuture with the updated agent status
      */
@@ -206,6 +215,10 @@ public final class RegistrationClient {
 
     /**
      * Revokes an agent registration asynchronously.
+     *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see
+     * {@link #revokeAgent(String, AgentRevocationRequest)} for the causes.</p>
      *
      * @param agentId the agent ID to revoke
      * @param request the revocation request
@@ -217,6 +230,10 @@ public final class RegistrationClient {
 
     /**
      * Revokes an agent registration asynchronously with just a reason code.
+     *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see
+     * {@link #revokeAgent(String, RevocationReason)} for the causes.</p>
      *
      * @param agentId the agent ID to revoke
      * @param reason the reason for revocation

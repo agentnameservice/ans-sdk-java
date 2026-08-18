@@ -52,7 +52,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @WireMockTest
 class IdentityServiceTest {
 
-    private static final String IDENTITY_ID = "id-550e8400-e29b-41d4-a716-446655440000";
+    private static final String IDENTITY_ID = "660e8400-e29b-41d4-a716-446655440000";
     private static final String AGENT_ID = "550e8400-e29b-41d4-a716-446655440000";
     private static final String COLLECTION = "/v2/ans/identities";
     private static final String API_KEY = "test-api-key";

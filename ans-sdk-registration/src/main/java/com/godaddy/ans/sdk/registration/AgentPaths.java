@@ -1,5 +1,7 @@
 package com.godaddy.ans.sdk.registration;
 
+import static com.godaddy.ans.sdk.util.Identifiers.requireUuid;
+
 import com.godaddy.ans.sdk.config.ApiVersion;
 
 /**
@@ -50,7 +52,7 @@ final class AgentPaths {
     static String agentPath(ApiVersion apiVersion, String agentId, String... segments) {
         StringBuilder path = new StringBuilder(agentsCollectionPath(apiVersion))
             .append('/')
-            .append(agentId);
+            .append(requireUuid(agentId, "agentId"));
         for (String segment : segments) {
             path.append('/').append(segment);
         }

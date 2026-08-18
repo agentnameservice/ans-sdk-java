@@ -1,5 +1,7 @@
 package com.godaddy.ans.sdk.discovery;
 
+import static com.godaddy.ans.sdk.util.Identifiers.requireUuid;
+
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -158,7 +160,7 @@ class ResolutionService {
      * @throws AnsAuthenticationException if authentication fails
      */
     AgentDetails getAgent(String agentId) {
-        HttpRequest request = createRequestBuilder("/v1/agents/" + agentId)
+        HttpRequest request = createRequestBuilder("/v1/agents/" + requireUuid(agentId, "agentId"))
             .GET()
             .build();
 

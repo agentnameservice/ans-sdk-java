@@ -1,5 +1,7 @@
 package com.godaddy.ans.sdk.registration;
 
+import static com.godaddy.ans.sdk.util.Identifiers.requireUuid;
+
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.StringJoiner;
@@ -59,7 +61,7 @@ final class IdentityPaths {
     static String identityPath(String identityId, String... segments) {
         StringBuilder path = new StringBuilder(COLLECTION)
             .append('/')
-            .append(identityId);
+            .append(requireUuid(identityId, "identityId"));
         for (String segment : segments) {
             path.append('/').append(segment);
         }
@@ -104,6 +106,6 @@ final class IdentityPaths {
      * @return {@code /v2/ans/identities/{identityId}/links/{agentId}}
      */
     static String linkPath(String identityId, String agentId) {
-        return identityPath(identityId, "links", agentId);
+        return identityPath(identityId, "links", requireUuid(agentId, "agentId"));
     }
 }

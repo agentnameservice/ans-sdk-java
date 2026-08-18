@@ -4,6 +4,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Unit tests for {@link IdentityPaths}, the single source of RA Verified-Identity paths.
@@ -14,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class IdentityPathsTest {
 
-    private static final String IDENTITY_ID = "id-550e8400-e29b-41d4-a716-446655440000";
+    private static final String IDENTITY_ID = "660e8400-e29b-41d4-a716-446655440000";
     private static final String AGENT_ID = "550e8400-e29b-41d4-a716-446655440000";
     private static final String COLLECTION = "/v2/ans/identities";
 
@@ -63,6 +64,22 @@ class IdentityPathsTest {
     void linkPath() {
         assertThat(IdentityPaths.linkPath(IDENTITY_ID, AGENT_ID))
             .isEqualTo(COLLECTION + "/" + IDENTITY_ID + "/links/" + AGENT_ID);
+    }
+
+    @Test
+    @DisplayName("identityPath rejects a non-UUID identityId")
+    void identityPathRejectsNonUuid() {
+        assertThatThrownBy(() -> IdentityPaths.identityPath("did:web:example.com#key-1"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("identityId");
+    }
+
+    @Test
+    @DisplayName("linkPath rejects a non-UUID agentId")
+    void linkPathRejectsNonUuidAgentId() {
+        assertThatThrownBy(() -> IdentityPaths.linkPath(IDENTITY_ID, "not-a-uuid/../secrets"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("agentId");
     }
 
     @Test

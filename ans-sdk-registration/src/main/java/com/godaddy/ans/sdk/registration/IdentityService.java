@@ -44,6 +44,7 @@ class IdentityService {
         String requestBody = httpClient.serializeToJson(request);
 
         HttpRequest httpRequest = httpClient.createRequestBuilder(IdentityPaths.identitiesCollectionPath())
+            .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(requestBody))
             .build();
 
@@ -96,6 +97,7 @@ class IdentityService {
         String requestBody = httpClient.serializeToJson(request);
 
         HttpRequest httpRequest = httpClient.createRequestBuilder(IdentityPaths.identityPath(identityId))
+            .header("Content-Type", "application/json")
             .PUT(HttpRequest.BodyPublishers.ofString(requestBody))
             .build();
 
@@ -120,6 +122,7 @@ class IdentityService {
         String requestBody = httpClient.serializeToJson(request);
 
         HttpRequest httpRequest = httpClient.createRequestBuilder(IdentityPaths.verifyControlPath(identityId))
+            .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(requestBody))
             .build();
 
@@ -155,6 +158,7 @@ class IdentityService {
         String requestBody = httpClient.serializeToJson(request);
 
         HttpRequest httpRequest = httpClient.createRequestBuilder(IdentityPaths.linksPath(identityId))
+            .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(requestBody))
             .build();
 

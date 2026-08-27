@@ -7,6 +7,7 @@ include("ans-sdk-registration")
 include("ans-sdk-discovery")
 include("ans-sdk-agent-client")
 include("ans-sdk-transparency")
+include("ans-sdk-pop")
 include("ans-sdk-spring-boot-starter")
 
 // Examples - not published to Maven, but useful for users of the SDK to reference and run locally

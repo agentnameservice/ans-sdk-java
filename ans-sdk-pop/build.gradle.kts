@@ -1,4 +1,5 @@
 val nimbusJoseVersion: String by project
+val bouncyCastleVersion: String by project
 val slf4jVersion: String by project
 val cborVersion: String by project
 val junitVersion: String by project
@@ -28,6 +29,8 @@ dependencies {
     testImplementation("org.mockito:mockito-core:$mockitoVersion")
     testImplementation("org.mockito:mockito-junit-jupiter:$mockitoVersion")
     testImplementation("org.assertj:assertj-core:$assertjVersion")
+    testImplementation("org.bouncycastle:bcpkix-jdk18on:$bouncyCastleVersion")
+    testImplementation("org.bouncycastle:bcprov-jdk18on:$bouncyCastleVersion")
     testImplementation("com.upokecenter:cbor:$cborVersion")
     testRuntimeOnly("org.slf4j:slf4j-simple:$slf4jVersion")
 }

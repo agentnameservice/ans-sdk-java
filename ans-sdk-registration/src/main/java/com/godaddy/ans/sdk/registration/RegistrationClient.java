@@ -3,12 +3,14 @@ package com.godaddy.ans.sdk.registration;
 import com.godaddy.ans.sdk.auth.AnsCredentialsProvider;
 import com.godaddy.ans.sdk.concurrent.AnsExecutors;
 import com.godaddy.ans.sdk.config.AnsConfiguration;
+import com.godaddy.ans.sdk.config.ApiVersion;
 import com.godaddy.ans.sdk.config.Environment;
-import com.godaddy.ans.sdk.model.generated.AgentDetails;
-import com.godaddy.ans.sdk.model.generated.AgentRegistrationRequest;
-import com.godaddy.ans.sdk.model.generated.AgentRevocationRequest;
-import com.godaddy.ans.sdk.model.generated.AgentRevocationResponse;
-import com.godaddy.ans.sdk.model.generated.AgentStatus;
+import com.godaddy.ans.sdk.model.AgentDetails;
+import com.godaddy.ans.sdk.model.AgentRegistrationRequest;
+import com.godaddy.ans.sdk.model.AgentRevocationRequest;
+import com.godaddy.ans.sdk.model.AgentRevocationResponse;
+import com.godaddy.ans.sdk.model.AgentStatus;
+import com.godaddy.ans.sdk.model.RevocationReason;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
@@ -54,11 +56,10 @@ public final class RegistrationClient {
     private final RegistrationService registrationService;
     private final CertificateService certificateService;
 
-    private RegistrationClient(AnsConfiguration configuration) {
+    private RegistrationClient(AnsConfiguration configuration, AnsApiClient ansApiClient) {
         this.configuration = configuration;
-        var ansClient = new AnsApiClient(configuration);
-        this.registrationService = new RegistrationService(ansClient);
-        this.certificateService = new CertificateService(configuration);
+        this.registrationService = new RegistrationService(ansApiClient);
+        this.certificateService = new CertificateService(ansApiClient);
     }
 
     /**
@@ -166,7 +167,7 @@ public final class RegistrationClient {
      * @return the revocation response
      * @see #revokeAgent(String, AgentRevocationRequest)
      */
-    public AgentRevocationResponse revokeAgent(String agentId, AgentRevocationRequest.ReasonEnum reason) {
+    public AgentRevocationResponse revokeAgent(String agentId, RevocationReason reason) {
         AgentRevocationRequest request = new AgentRevocationRequest().reason(reason);
         return revokeAgent(agentId, request);
     }
@@ -175,6 +176,9 @@ public final class RegistrationClient {
 
     /**
      * Registers a new agent asynchronously.
+     *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see {@link #registerAgent} for the causes.</p>
      *
      * @param request the registration request
      * @return a CompletableFuture with the agent details
@@ -186,6 +190,9 @@ public final class RegistrationClient {
     /**
      * Triggers ACME domain validation asynchronously.
      *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see {@link #verifyAcme} for the causes.</p>
+     *
      * @param agentId the agent ID
      * @return a CompletableFuture with the updated agent status
      */
@@ -196,6 +203,9 @@ public final class RegistrationClient {
     /**
      * Verifies DNS records asynchronously.
      *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see {@link #verifyDns} for the causes.</p>
+     *
      * @param agentId the agent ID
      * @return a CompletableFuture with the updated agent status
      */
@@ -205,6 +215,10 @@ public final class RegistrationClient {
 
     /**
      * Revokes an agent registration asynchronously.
+     *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see
+     * {@link #revokeAgent(String, AgentRevocationRequest)} for the causes.</p>
      *
      * @param agentId the agent ID to revoke
      * @param request the revocation request
@@ -217,12 +231,16 @@ public final class RegistrationClient {
     /**
      * Revokes an agent registration asynchronously with just a reason code.
      *
+     * <p>Failures arrive through the returned future. {@code get()} wraps them in
+     * {@link java.util.concurrent.ExecutionException}; see
+     * {@link #revokeAgent(String, RevocationReason)} for the causes.</p>
+     *
      * @param agentId the agent ID to revoke
      * @param reason the reason for revocation
      * @return a CompletableFuture with the revocation response
      */
     public CompletableFuture<AgentRevocationResponse> revokeAgentAsync(String agentId,
-                                                                       AgentRevocationRequest.ReasonEnum reason) {
+                                                                       RevocationReason reason) {
         return CompletableFuture.supplyAsync(() -> revokeAgent(agentId, reason), AnsExecutors.sharedIoExecutor());
     }
 
@@ -338,6 +356,17 @@ public final class RegistrationClient {
         }
 
         /**
+         * Sets the API version lane. Defaults to {@link ApiVersion#V2}.
+         *
+         * @param apiVersion the API version
+         * @return this builder
+         */
+        public Builder apiVersion(ApiVersion apiVersion) {
+            configBuilder.apiVersion(apiVersion);
+            return this;
+        }
+
+        /**
          * Builds the RegistrationClient.
          *
          * @return a new RegistrationClient instance
@@ -346,7 +375,7 @@ public final class RegistrationClient {
             AnsConfiguration config = (prebuiltConfiguration != null)
                 ? prebuiltConfiguration
                 : configBuilder.build();
-            return new RegistrationClient(config);
+            return new RegistrationClient(config, new AnsApiClient(config));
         }
     }
 }

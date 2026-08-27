@@ -1,4 +1,5 @@
 val bouncyCastleVersion: String by project
+val nimbusJoseVersion: String by project
 val slf4jVersion: String by project
 val junitVersion: String by project
 val mockitoVersion: String by project
@@ -11,6 +12,9 @@ dependencies {
     // Bouncy Castle for crypto operations
     implementation("org.bouncycastle:bcpkix-jdk18on:$bouncyCastleVersion")
     implementation("org.bouncycastle:bcprov-jdk18on:$bouncyCastleVersion")
+
+    // Nimbus JOSE + JWT for compact-JWS control proofs (EdDSA/ES256/RS256)
+    implementation("com.nimbusds:nimbus-jose-jwt:$nimbusJoseVersion")
 
     // Logging
     implementation("org.slf4j:slf4j-api:$slf4jVersion")

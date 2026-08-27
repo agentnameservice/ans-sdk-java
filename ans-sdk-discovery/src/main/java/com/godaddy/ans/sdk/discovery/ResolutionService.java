@@ -1,5 +1,7 @@
 package com.godaddy.ans.sdk.discovery;
 
+import static com.godaddy.ans.sdk.util.Identifiers.requireUuid;
+
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -10,8 +12,7 @@ import com.godaddy.ans.sdk.exception.AnsNotFoundException;
 import com.godaddy.ans.sdk.exception.AnsServerException;
 import com.godaddy.ans.sdk.exception.AnsValidationException;
 import com.godaddy.ans.sdk.http.HttpClientFactory;
-import com.godaddy.ans.sdk.model.generated.AgentCapabilityRequest;
-import com.godaddy.ans.sdk.model.generated.AgentDetails;
+import com.godaddy.ans.sdk.model.AgentDetails;
 
 import java.io.IOException;
 import java.net.URI;
@@ -21,6 +22,13 @@ import java.net.http.HttpResponse;
 
 /**
  * Internal service for handling agent resolution API calls.
+ *
+ * <p>Resolution is intentionally pinned to the legacy-live v1 service
+ * ({@code /v1/agents/resolution} and {@code /v1/agents/{agentId}}) regardless of
+ * the configured {@link com.godaddy.ans.sdk.config.ApiVersion}. Resolution has no
+ * v2 equivalent: {@code POST /v1/agents/resolution} was deliberately not carried
+ * forward to v2 (the {@code _ans} DNS TXT record already carries agent endpoints).
+ * This pinning is by design, not an oversight.</p>
  */
 class ResolutionService {
 
@@ -48,9 +56,7 @@ class ResolutionService {
     AgentDetails resolve(String agentHost, String version) {
         // Step 1: POST to /v1/agents/resolution to get the agent-details link
         String resolveVersion = (version != null && !version.isEmpty()) ? version : "*";
-        AgentCapabilityRequest request = new AgentCapabilityRequest()
-            .agentHost(agentHost)
-            .version(resolveVersion);
+        AgentCapabilityRequest request = new AgentCapabilityRequest(agentHost, resolveVersion);
         String requestBody = serializeToJson(request);
 
         HttpRequest resolutionRequest = createRequestBuilder("/v1/agents/resolution")
@@ -154,7 +160,7 @@ class ResolutionService {
      * @throws AnsAuthenticationException if authentication fails
      */
     AgentDetails getAgent(String agentId) {
-        HttpRequest request = createRequestBuilder("/v1/agents/" + agentId)
+        HttpRequest request = createRequestBuilder("/v1/agents/" + requireUuid(agentId, "agentId"))
             .GET()
             .build();
 

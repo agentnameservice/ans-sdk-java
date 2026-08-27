@@ -1,18 +1,22 @@
 package com.godaddy.ans.sdk.transparency;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.godaddy.ans.sdk.exception.AnsNotFoundException;
 import com.godaddy.ans.sdk.exception.AnsServerException;
 import com.godaddy.ans.sdk.transparency.model.AgentAuditParams;
+import com.godaddy.ans.sdk.transparency.model.AgentIdentitiesResponse;
 import com.godaddy.ans.sdk.transparency.model.CheckpointHistoryParams;
 import com.godaddy.ans.sdk.transparency.model.CheckpointHistoryResponse;
 import com.godaddy.ans.sdk.transparency.model.CheckpointResponse;
+import com.godaddy.ans.sdk.transparency.model.IdentityLinkedAgentsResponse;
 import com.godaddy.ans.sdk.transparency.model.TransparencyLog;
 import com.godaddy.ans.sdk.transparency.model.TransparencyLogAudit;
 import com.godaddy.ans.sdk.transparency.model.TransparencyLogV0;
 import com.godaddy.ans.sdk.transparency.model.TransparencyLogV1;
+import com.godaddy.ans.sdk.transparency.model.TransparencyLogV2;
 import com.godaddy.ans.sdk.transparency.scitt.RefreshDecision;
 
 import org.slf4j.Logger;
@@ -26,6 +30,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.PublicKey;
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
@@ -94,6 +99,54 @@ class TransparencyService implements AutoCloseable {
             return audit;
         } catch (IOException e) {
             throw new AnsServerException("Failed to parse audit response: " + e.getMessage(), 0, e, null);
+        }
+    }
+
+    /**
+     * Gets the forward join: the identities an agent currently links to.
+     *
+     * @param agentId the agent's unique identifier
+     * @param params optional pagination parameters (limit, offset)
+     * @return the linked identities plus the full count before pagination
+     */
+    AgentIdentitiesResponse getAgentIdentities(String agentId, AgentAuditParams params) {
+        String path = "/v1/agents/" + URLEncoder.encode(agentId, StandardCharsets.UTF_8) + "/identities";
+        if (params != null) {
+            path = appendAuditParams(path, params);
+        }
+
+        HttpRequest request = createRequestBuilder(path).GET().build();
+        HttpResponse<String> response = sendRequest(request);
+
+        try {
+            return objectMapper.readValue(response.body(), AgentIdentitiesResponse.class);
+        } catch (IOException e) {
+            throw new AnsServerException(
+                "Failed to parse agent identities response: " + e.getMessage(), 0, e, null);
+        }
+    }
+
+    /**
+     * Gets the agent's identity link history in the standard audit envelope.
+     *
+     * @param agentId the agent's unique identifier
+     * @param params optional pagination parameters (limit, offset)
+     * @return the history records
+     */
+    TransparencyLogAudit getAgentIdentityHistory(String agentId, AgentAuditParams params) {
+        String path = "/v1/agents/" + URLEncoder.encode(agentId, StandardCharsets.UTF_8) + "/identities/history";
+        if (params != null) {
+            path = appendAuditParams(path, params);
+        }
+
+        HttpRequest request = createRequestBuilder(path).GET().build();
+        HttpResponse<String> response = sendRequest(request);
+
+        try {
+            return objectMapper.readValue(response.body(), TransparencyLogAudit.class);
+        } catch (IOException e) {
+            throw new AnsServerException(
+                "Failed to parse agent identity history response: " + e.getMessage(), 0, e, null);
         }
     }
 
@@ -189,6 +242,187 @@ class TransparencyService implements AutoCloseable {
     CompletableFuture<byte[]> getStatusTokenAsync(String agentId) {
         String path = "/v1/agents/" + URLEncoder.encode(agentId, StandardCharsets.UTF_8) + "/status-token";
         return fetchBinaryResponseAsync(path, "application/ans-status-token+cbor");
+    }
+
+    // ==================== Verified-Identity Reads ====================
+
+    /**
+     * Gets the identity badge: the latest sealed identity event plus its computed status.
+     *
+     * <p>The response is the same shape as an agent transparency log entry, but the payload is an
+     * identity event. This method does not run the agent V0/V1 payload parser, so the identity
+     * event stays in the raw {@link TransparencyLog#getPayload()} map.</p>
+     *
+     * @param identityId the identity's unique identifier
+     * @return the identity badge
+     */
+    TransparencyLog getIdentityBadge(String identityId) {
+        String path = "/v1/identities/" + URLEncoder.encode(identityId, StandardCharsets.UTF_8);
+        HttpRequest request = createRequestBuilder(path).GET().build();
+        HttpResponse<String> response = sendRequest(request);
+
+        try {
+            return objectMapper.readValue(response.body(), TransparencyLog.class);
+        } catch (IOException e) {
+            throw new AnsServerException("Failed to parse identity badge response: " + e.getMessage(), 0, e, null);
+        }
+    }
+
+    /**
+     * Gets the identity's full event chain in the standard audit envelope.
+     *
+     * @param identityId the identity's unique identifier
+     * @param params optional pagination parameters (limit, offset)
+     * @return the audit records
+     */
+    TransparencyLogAudit getIdentityAudit(String identityId, AgentAuditParams params) {
+        String path = "/v1/identities/" + URLEncoder.encode(identityId, StandardCharsets.UTF_8) + "/audit";
+        if (params != null) {
+            path = appendAuditParams(path, params);
+        }
+
+        HttpRequest request = createRequestBuilder(path).GET().build();
+        HttpResponse<String> response = sendRequest(request);
+
+        try {
+            return objectMapper.readValue(response.body(), TransparencyLogAudit.class);
+        } catch (IOException e) {
+            throw new AnsServerException("Failed to parse identity audit response: " + e.getMessage(), 0, e, null);
+        }
+    }
+
+    /**
+     * Gets the reverse join: the agents this identity currently links to, each with its own
+     * computed badge status.
+     *
+     * @param identityId the identity's unique identifier
+     * @param params optional pagination parameters (limit, offset)
+     * @return the linked agents plus the full count before pagination
+     */
+    IdentityLinkedAgentsResponse getIdentityLinkedAgents(String identityId, AgentAuditParams params) {
+        String path = "/v1/identities/" + URLEncoder.encode(identityId, StandardCharsets.UTF_8) + "/agents";
+        if (params != null) {
+            path = appendAuditParams(path, params);
+        }
+
+        HttpRequest request = createRequestBuilder(path).GET().build();
+        HttpResponse<String> response = sendRequest(request);
+
+        try {
+            return objectMapper.readValue(response.body(), IdentityLinkedAgentsResponse.class);
+        } catch (IOException e) {
+            throw new AnsServerException(
+                "Failed to parse identity linked-agents response: " + e.getMessage(), 0, e, null);
+        }
+    }
+
+    /**
+     * Gets the SCITT receipt for the identity's latest sealed event.
+     *
+     * <p>A {@code 503 TL_LEAF_UNCOMMITTED} response means the leaf is committed but no signed
+     * checkpoint covers it yet. That is a retryable condition. The SDK surfaces it as
+     * {@link TlLeafUncommittedException} carrying the server's {@code Retry-After} delay.</p>
+     *
+     * @param identityId the identity's unique identifier
+     * @return the raw receipt bytes (COSE_Sign1)
+     * @throws TlLeafUncommittedException if the receipt is not yet available (retryable)
+     */
+    byte[] getIdentityReceipt(String identityId) {
+        String path = "/v1/identities/" + URLEncoder.encode(identityId, StandardCharsets.UTF_8) + "/receipt";
+        HttpRequest request = buildBinaryRequest(path, "application/scitt-receipt+cose");
+
+        try {
+            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            return handleIdentityReceiptResponse(response);
+        } catch (IOException e) {
+            throw new AnsServerException("Network error: " + e.getMessage(), 0, e, null);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AnsServerException("Request interrupted", 0, e, null);
+        }
+    }
+
+    /**
+     * Gets the SCITT receipt for the identity's latest sealed event asynchronously.
+     *
+     * <p>If the receipt is not yet available, the returned future completes exceptionally with a
+     * retryable {@link TlLeafUncommittedException}.</p>
+     *
+     * @param identityId the identity's unique identifier
+     * @return a CompletableFuture with the raw receipt bytes (COSE_Sign1)
+     */
+    CompletableFuture<byte[]> getIdentityReceiptAsync(String identityId) {
+        String path = "/v1/identities/" + URLEncoder.encode(identityId, StandardCharsets.UTF_8) + "/receipt";
+        HttpRequest request = buildBinaryRequest(path, "application/scitt-receipt+cose");
+
+        return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray())
+            .thenApply(this::handleIdentityReceiptResponse);
+    }
+
+    /**
+     * Maps an identity-receipt HTTP response to bytes, surfacing the retryable uncommitted-leaf case.
+     *
+     * <p>A {@code 503} whose error body has {@code code} equal to {@link TlLeafUncommittedException#ERROR_CODE}
+     * means the leaf is committed but no signed checkpoint covers it yet. That is retryable and becomes a
+     * {@link TlLeafUncommittedException}. Any other non-2xx status falls through to
+     * {@link #throwForStatus(int, String, String)}.</p>
+     */
+    private byte[] handleIdentityReceiptResponse(HttpResponse<byte[]> response) {
+        int status = response.statusCode();
+        if (status >= 200 && status < 300) {
+            return response.body();
+        }
+
+        String requestId = response.headers().firstValue("X-Request-Id").orElse(null);
+        String body = new String(response.body(), StandardCharsets.UTF_8);
+        if (status == TlLeafUncommittedException.STATUS_SERVICE_UNAVAILABLE && isLeafUncommitted(body)) {
+            int retryAfter = parseRetryAfter(response.headers().firstValue("Retry-After").orElse(null));
+            throw new TlLeafUncommittedException(
+                "Identity receipt not yet available (TL_LEAF_UNCOMMITTED): " + body, retryAfter, requestId);
+        }
+        throwForStatus(status, body, requestId);
+        return response.body(); // unreachable: throwForStatus always throws for non-2xx
+    }
+
+    /**
+     * Returns true when the error body is JSON whose {@code code} field equals
+     * {@link TlLeafUncommittedException#ERROR_CODE}.
+     *
+     * <p>A non-JSON body, or one without that code, returns false. So an unrelated {@code 503} stays a
+     * plain server error and is never mapped to the retryable case.</p>
+     */
+    private boolean isLeafUncommitted(String body) {
+        try {
+            JsonNode code = objectMapper.readTree(body).get("code");
+            return code != null && TlLeafUncommittedException.ERROR_CODE.equals(code.asText());
+        } catch (IOException notJson) {
+            return false;
+        }
+    }
+
+    /**
+     * Parses a {@code Retry-After} header, accepting both RFC-7231 forms: delay-seconds and HTTP-date.
+     *
+     * @param headerValue the raw header value, may be null
+     * @return the delay in seconds (never negative), or 0 if absent or unparseable
+     */
+    private int parseRetryAfter(String headerValue) {
+        if (headerValue == null || headerValue.isBlank()) {
+            return 0;
+        }
+        String trimmed = headerValue.trim();
+        try {
+            return Math.max(0, Integer.parseInt(trimmed));
+        } catch (NumberFormatException notSeconds) {
+            // Fall through to the HTTP-date form.
+        }
+        try {
+            Instant deadline = Instant.from(DateTimeFormatter.RFC_1123_DATE_TIME.parse(trimmed));
+            long seconds = Duration.between(Instant.now(), deadline).getSeconds();
+            return (int) Math.max(0, Math.min(seconds, Integer.MAX_VALUE));
+        } catch (DateTimeException notDate) {
+            return 0;
+        }
     }
 
     /**
@@ -342,7 +576,10 @@ class TransparencyService implements AutoCloseable {
         }
 
         try {
-            if ("V1".equalsIgnoreCase(schemaVersion)) {
+            if ("V2".equalsIgnoreCase(schemaVersion)) {
+                TransparencyLogV2 v2 = objectMapper.convertValue(result.getPayload(), TransparencyLogV2.class);
+                result.setParsedPayload(v2);
+            } else if ("V1".equalsIgnoreCase(schemaVersion)) {
                 TransparencyLogV1 v1 = objectMapper.convertValue(result.getPayload(), TransparencyLogV1.class);
                 result.setParsedPayload(v1);
             } else {

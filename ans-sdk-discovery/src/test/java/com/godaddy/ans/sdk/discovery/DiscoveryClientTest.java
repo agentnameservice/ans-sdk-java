@@ -5,8 +5,8 @@ import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import com.godaddy.ans.sdk.auth.JwtCredentialsProvider;
 import com.godaddy.ans.sdk.config.AnsConfiguration;
 import com.godaddy.ans.sdk.config.Environment;
-import com.godaddy.ans.sdk.model.generated.AgentDetails;
-import com.godaddy.ans.sdk.model.generated.AgentLifecycleStatus;
+import com.godaddy.ans.sdk.model.AgentDetails;
+import com.godaddy.ans.sdk.model.AgentLifecycleStatus;
 import com.godaddy.ans.sdk.exception.AnsAuthenticationException;
 import com.godaddy.ans.sdk.exception.AnsNotFoundException;
 import com.godaddy.ans.sdk.exception.AnsServerException;
@@ -165,7 +165,7 @@ class DiscoveryClientTest {
         AgentDetails result = client.resolve(TEST_AGENT_HOST, "^1.0.0");
 
         assertThat(result).isNotNull();
-        assertThat(result.getAgentId()).isEqualTo(TEST_AGENT_ID);
+        assertThat(result.getAgentId()).hasToString(TEST_AGENT_ID);
         assertThat(result.getAgentHost()).isEqualTo(TEST_AGENT_HOST);
         assertThat(result.getAgentDisplayName()).isEqualTo("Booking Agent");
         assertThat(result.getAgentDescription()).isEqualTo("A booking agent for scheduling appointments");
@@ -225,7 +225,7 @@ class DiscoveryClientTest {
         AgentDetails result = client.resolve(TEST_AGENT_HOST);
 
         assertThat(result).isNotNull();
-        assertThat(result.getAgentId()).isEqualTo(TEST_AGENT_ID);
+        assertThat(result.getAgentId()).hasToString(TEST_AGENT_ID);
 
         // Verify wildcard version was used
         verify(postRequestedFor(urlEqualTo("/v1/agents/resolution"))
@@ -259,7 +259,7 @@ class DiscoveryClientTest {
         AgentDetails result = future.get();
 
         assertThat(result).isNotNull();
-        assertThat(result.getAgentId()).isEqualTo(TEST_AGENT_ID);
+        assertThat(result.getAgentId()).hasToString(TEST_AGENT_ID);
     }
 
     // ==================== Resolution Error Tests ====================
@@ -444,7 +444,7 @@ class DiscoveryClientTest {
         AgentDetails result = client.getAgent(TEST_AGENT_ID);
 
         assertThat(result).isNotNull();
-        assertThat(result.getAgentId()).isEqualTo(TEST_AGENT_ID);
+        assertThat(result.getAgentId()).hasToString(TEST_AGENT_ID);
         assertThat(result.getAgentHost()).isEqualTo(TEST_AGENT_HOST);
         assertThat(result.getVersion()).isEqualTo("1.0.0");
         assertThat(result.getAgentStatus()).isEqualTo(AgentLifecycleStatus.ACTIVE);
@@ -517,7 +517,7 @@ class DiscoveryClientTest {
         AgentDetails result = future.get();
 
         assertThat(result).isNotNull();
-        assertThat(result.getAgentId()).isEqualTo(TEST_AGENT_ID);
+        assertThat(result.getAgentId()).hasToString(TEST_AGENT_ID);
     }
 
     @Test
@@ -583,7 +583,7 @@ class DiscoveryClientTest {
         AgentDetails result = client.resolve(TEST_AGENT_HOST);
 
         assertThat(result).isNotNull();
-        assertThat(result.getAgentId()).isEqualTo(TEST_AGENT_ID);
+        assertThat(result.getAgentId()).hasToString(TEST_AGENT_ID);
     }
 
     @Test

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.godaddy.ans.sdk.auth.AnsCredentials;
 import com.godaddy.ans.sdk.config.AnsConfiguration;
+import com.godaddy.ans.sdk.config.ApiVersion;
 import com.godaddy.ans.sdk.exception.AnsAuthenticationException;
 import com.godaddy.ans.sdk.exception.AnsConflictException;
 import com.godaddy.ans.sdk.exception.AnsNotFoundException;
@@ -40,7 +41,12 @@ class AnsApiClient {
     }
 
     /**
-     * Creates an HTTP request builder with common headers (Authorization, Content-Type, Accept).
+     * Creates an HTTP request builder with common headers (Authorization, Accept).
+     *
+     * <p>Content-Type is not set here. It describes a request body, so callers that
+     * send one add {@code Content-Type: application/json} on the returned builder.
+     * Bodyless requests (GET, DELETE, bodyless POST) omit it: a JSON content type on
+     * an empty body is malformed and strict gateways can reject it.</p>
      *
      * @param path the API path (e.g., "/v1/agents/register")
      * @return a configured HttpRequest.Builder
@@ -51,7 +57,6 @@ class AnsApiClient {
         return HttpRequest.newBuilder()
             .uri(URI.create(configuration.getBaseUrl() + path))
             .header("Authorization", credentials.toAuthorizationHeader())
-            .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .timeout(configuration.getReadTimeout());
     }
@@ -163,5 +168,9 @@ class AnsApiClient {
         } catch (IOException e) {
             throw new AnsServerException("Failed to serialize request: " + e.getMessage(), 0, e, null);
         }
+    }
+
+    ApiVersion getApiVersion() {
+        return configuration.getApiVersion();
     }
 }

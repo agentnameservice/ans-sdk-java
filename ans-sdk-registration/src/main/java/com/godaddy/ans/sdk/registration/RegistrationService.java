@@ -1,16 +1,20 @@
 package com.godaddy.ans.sdk.registration;
 
+import com.godaddy.ans.sdk.config.ApiVersion;
 import com.godaddy.ans.sdk.exception.AnsServerException;
-import com.godaddy.ans.sdk.model.generated.AgentDetails;
-import com.godaddy.ans.sdk.model.generated.AgentRegistrationRequest;
-import com.godaddy.ans.sdk.model.generated.AgentRevocationRequest;
-import com.godaddy.ans.sdk.model.generated.AgentRevocationResponse;
-import com.godaddy.ans.sdk.model.generated.AgentStatus;
-import com.godaddy.ans.sdk.model.generated.Link;
-import com.godaddy.ans.sdk.model.generated.RegistrationPending;
+import com.godaddy.ans.sdk.model.AgentDetails;
+import com.godaddy.ans.sdk.model.AgentRegistrationRequest;
+import com.godaddy.ans.sdk.model.AgentRevocationRequest;
+import com.godaddy.ans.sdk.model.AgentRevocationResponse;
+import com.godaddy.ans.sdk.model.AgentStatus;
+import com.godaddy.ans.sdk.model.DiscoveryProfile;
+import com.godaddy.ans.sdk.model.Link;
+import com.godaddy.ans.sdk.model.RegistrationPending;
 
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * Internal service for handling registration API calls.
@@ -18,33 +22,77 @@ import java.net.http.HttpResponse;
 class RegistrationService {
 
     private final AnsApiClient httpClient;
+    private final ApiVersion apiVersion;
 
     RegistrationService(final AnsApiClient ansApiClient) {
         this.httpClient = ansApiClient;
+        this.apiVersion = ansApiClient.getApiVersion();
     }
+
     /**
      * Registers a new agent and returns full agent details.
      *
-     * <p>This method registers the agent and then follows the 'self' link
-     * to retrieve the complete AgentDetails including the agentId.</p>
+     * <p>On the v2 lane the {@code agentId} returned in the registration response
+     * is used directly to fetch the complete {@link AgentDetails}. On the v1 lane
+     * the 'self' link is followed instead (HATEOAS).</p>
      */
     AgentDetails register(AgentRegistrationRequest request) {
+        // discoveryProfiles is a v2-only field. The v1 lane ignores it server-side, so an
+        // explicit selection on v1 is a client misconfiguration: reject it rather than drop
+        // it silently. An empty set (the default) carries no selection and is omitted on the wire.
+        rejectDiscoveryProfilesOnV1(request);
+
         String requestBody = httpClient.serializeToJson(request);
 
-        HttpRequest httpRequest = httpClient.createRequestBuilder("/v1/agents/register")
+        HttpRequest httpRequest = httpClient.createRequestBuilder(AgentPaths.registerPath(apiVersion))
+            .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(requestBody))
             .build();
 
         HttpResponse<String> response = httpClient.sendRequest(httpRequest);
         RegistrationPending pending = httpClient.parseResponse(response.body(), RegistrationPending.class);
 
-        // Follow the 'self' link to get full AgentDetails with agentId
-        String selfPath = extractSelfLink(pending);
-        if (selfPath == null) {
-            throw new AnsServerException("Registration response missing 'self' link", 0, null);
+        return getAgentDetails(resolveAgentDetailsPath(pending));
+    }
+
+    /**
+     * Rejects a discoveryProfiles selection on the v1 lane.
+     *
+     * <p>discoveryProfiles is a v2-only field. The v1 lane ignores it server-side, so an
+     * explicit selection is a client misconfiguration. The default (empty) set carries no
+     * selection and is allowed on either lane.</p>
+     */
+    private void rejectDiscoveryProfilesOnV1(AgentRegistrationRequest request) {
+        if (apiVersion != ApiVersion.V1) {
+            return;
+        }
+        Set<DiscoveryProfile> profiles = request.getDiscoveryProfiles();
+        if (profiles != null && !profiles.isEmpty()) {
+            throw new IllegalArgumentException(
+                "discoveryProfiles requires ApiVersion.V2; the v1 lane ignores the field. "
+                + "Remove the profile selection or build the client with ApiVersion.V2.");
+        }
+    }
+
+    /**
+     * Resolves the path to fetch full agent details after registration.
+     *
+     * <p>v2 uses {@code pending.getAgentId()} directly; v1 follows the 'self' link.</p>
+     */
+    private String resolveAgentDetailsPath(RegistrationPending pending) {
+        if (apiVersion == ApiVersion.V1) {
+            String selfPath = extractSelfLink(pending);
+            if (selfPath == null) {
+                throw new AnsServerException("Registration response missing 'self' link", 0, null);
+            }
+            return selfPath;
         }
 
-        return getAgentDetails(selfPath);
+        UUID agentId = pending.getAgentId();
+        if (agentId == null) {
+            throw new AnsServerException("Registration response missing 'agentId'", 0, null);
+        }
+        return AgentPaths.agentPath(apiVersion, agentId.toString());
     }
 
     /**
@@ -63,14 +111,15 @@ class RegistrationService {
      * Gets agent details by agent ID.
      */
     AgentDetails getAgent(String agentId) {
-        return getAgentDetails("/v1/agents/" + agentId);
+        return getAgentDetails(AgentPaths.agentPath(apiVersion, agentId));
     }
 
     /**
      * Triggers ACME verification.
      */
     AgentStatus verifyAcme(String agentId) {
-        HttpRequest request = httpClient.createRequestBuilder("/v1/agents/" + agentId + "/verify-acme")
+        HttpRequest request = httpClient.createRequestBuilder(
+                AgentPaths.agentPath(apiVersion, agentId, "verify-acme"))
             .POST(HttpRequest.BodyPublishers.noBody())
             .build();
 
@@ -82,7 +131,8 @@ class RegistrationService {
      * Triggers DNS verification.
      */
     AgentStatus verifyDns(String agentId) {
-        HttpRequest request = httpClient.createRequestBuilder("/v1/agents/" + agentId + "/verify-dns")
+        HttpRequest request = httpClient.createRequestBuilder(
+                AgentPaths.agentPath(apiVersion, agentId, "verify-dns"))
             .POST(HttpRequest.BodyPublishers.noBody())
             .build();
 
@@ -104,7 +154,9 @@ class RegistrationService {
     AgentRevocationResponse revoke(String agentId, AgentRevocationRequest request) {
         String requestBody = httpClient.serializeToJson(request);
 
-        HttpRequest httpRequest = httpClient.createRequestBuilder("/v1/agents/" + agentId + "/revoke")
+        HttpRequest httpRequest = httpClient.createRequestBuilder(
+                AgentPaths.agentPath(apiVersion, agentId, "revoke"))
+            .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(requestBody))
             .build();
 

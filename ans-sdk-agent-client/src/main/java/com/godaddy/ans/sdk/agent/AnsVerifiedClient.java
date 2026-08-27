@@ -345,8 +345,8 @@ public class AnsVerifiedClient implements AutoCloseable {
                 .exceptionally(e -> {
                     Throwable cause = e instanceof CompletionException && e.getCause() != null
                         ? e.getCause() : e;
-                    LOGGER.warn("SCITT preflight failed: {}", cause.getMessage());
-                    return ScittPreVerifyResult.parseError("Preflight failed: " + cause.getMessage());
+                    LOGGER.warn("SCITT preflight to {}:{} failed", hostname, port, cause);
+                    return ScittPreVerifyResult.parseError("Preflight failed: " + cause);
                 });
         } else {
             scittFuture = CompletableFuture.completedFuture(ScittPreVerifyResult.notPresent());

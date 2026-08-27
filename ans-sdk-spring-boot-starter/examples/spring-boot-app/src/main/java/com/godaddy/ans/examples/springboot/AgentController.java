@@ -1,8 +1,9 @@
 package com.godaddy.ans.examples.springboot;
 
+import com.godaddy.ans.sdk.config.Environment;
 import com.godaddy.ans.sdk.discovery.DiscoveryClient;
-import com.godaddy.ans.sdk.model.generated.AgentDetails;
-import com.godaddy.ans.sdk.model.generated.AgentRegistrationRequest;
+import com.godaddy.ans.sdk.model.AgentDetails;
+import com.godaddy.ans.sdk.model.AgentRegistrationRequest;
 import com.godaddy.ans.sdk.registration.RegistrationClient;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -68,9 +69,10 @@ public class AgentController {
      */
     @GetMapping("/health")
     public ResponseEntity<Map<String, String>> health() {
+        Environment environment = registrationClient.getConfiguration().getEnvironment();
         return ResponseEntity.ok(Map.of(
             "status", "UP",
-            "environment", registrationClient.getConfiguration().getEnvironment().name()
+            "environment", environment != null ? environment.name() : "custom"
         ));
     }
 }

@@ -5,8 +5,8 @@ import com.godaddy.ans.sdk.agent.http.AgentHttpClientFactory;
 import com.godaddy.ans.sdk.agent.http.DefaultAgentHttpClientFactory;
 import com.godaddy.ans.sdk.agent.http.VerifiedClientResult;
 import com.godaddy.ans.sdk.agent.verification.DaneTlsaVerifier;
-import com.godaddy.ans.sdk.model.generated.AgentDetails;
-import com.godaddy.ans.sdk.model.generated.AgentLifecycleStatus;
+import com.godaddy.ans.sdk.model.AgentDetails;
+import com.godaddy.ans.sdk.model.AgentLifecycleStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

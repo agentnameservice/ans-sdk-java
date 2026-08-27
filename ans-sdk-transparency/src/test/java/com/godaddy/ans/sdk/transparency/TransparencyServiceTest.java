@@ -223,6 +223,33 @@ class TransparencyServiceTest {
         }
 
         @Test
+        @DisplayName("Should parse V2 payload with list-shaped attestations")
+        void shouldParseV2Payload(WireMockRuntimeInfo wmRuntimeInfo) {
+            String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+            stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID))
+                .willReturn(aResponse()
+                    .withStatus(200)
+                    .withHeader("Content-Type", "text/plain")
+                    .withHeader("X-Schema-Version", "V2")
+                    .withBody(v2Response())));
+
+            TransparencyService service = createService(baseUrl);
+            TransparencyLog result = service.getAgentTransparencyLog(TEST_AGENT_ID);
+
+            assertThat(result).isNotNull();
+            assertThat(result.getSchemaVersion()).isEqualTo("V2");
+            assertThat(result.isV2()).isTrue();
+            assertThat(result.getV2Payload()).isNotNull();
+            assertThat(result.getV2Payload().getEventType())
+                .isEqualTo(com.godaddy.ans.sdk.transparency.model.EventTypeV1.AGENT_REGISTERED);
+            assertThat(result.getAgentHost()).isEqualTo("agent.example.com");
+            assertThat(result.getServerCertFingerprint()).isEqualTo("SHA256:server");
+            assertThat(result.getIdentityCertFingerprint()).isEqualTo("SHA256:identity");
+            assertThat(result.getV2Payload().getAttestations().getDnsRecordsProvisioned()).hasSize(1);
+        }
+
+        @Test
         @DisplayName("Should parse V0 payload correctly")
         void shouldParseV0Payload(WireMockRuntimeInfo wmRuntimeInfo) {
             String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
@@ -1016,6 +1043,47 @@ class TransparencyServiceTest {
                 "ansId": "6bf2b7a9-1383-4e33-a945-845f34af7526",
                 "ansName": "ans://v1.0.0.agent.example.com",
                 "eventType": "AGENT_REGISTERED"
+              }
+            }
+            """;
+    }
+
+    private String v2Response() {
+        return """
+            {
+              "status": "ACTIVE",
+              "schemaVersion": "V2",
+              "payload": {
+                "logId": "log-v2-123",
+                "producer": {
+                  "event": {
+                    "ansId": "6bf2b7a9-1383-4e33-a945-845f34af7526",
+                    "ansName": "ans://v1.0.0.agent.example.com",
+                    "eventType": "AGENT_REGISTERED",
+                    "agent": {
+                      "host": "agent.example.com",
+                      "name": "Example Agent",
+                      "version": "1.0.0"
+                    },
+                    "expiresAt": "2026-11-03T04:16:01Z",
+                    "issuedAt": "2026-08-05T04:16:01Z",
+                    "timestamp": "2026-08-05T04:16:01Z",
+                    "attestations": {
+                      "domainValidation": "ACME-DNS-01",
+                      "dnsRecordsProvisioned": [
+                        { "name": "agent.example.com", "type": "SVCB", "data": "1 . alpn=mcp port=443" }
+                      ],
+                      "identityCerts": [
+                        { "fingerprint": "SHA256:identity", "type": "X509-OV-CLIENT" }
+                      ],
+                      "serverCerts": [
+                        { "fingerprint": "SHA256:server", "type": "X509-DV-SERVER" }
+                      ]
+                    }
+                  },
+                  "keyId": "ans-ra-signer",
+                  "signature": "sig"
+                }
               }
             }
             """;

@@ -6,5 +6,5 @@ application {
 
 dependencies {
     // MCP SDK
-    implementation("io.modelcontextprotocol.sdk:mcp:2.0.0")
+    implementation("io.modelcontextprotocol.sdk:mcp:2.0.1")
 }

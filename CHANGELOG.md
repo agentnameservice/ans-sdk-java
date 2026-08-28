@@ -1,10 +1,11 @@
 # Changelog
 
-## [0.1.10](https://github.com/agentnameservice/ans-sdk-java/compare/v0.1.9...v0.1.10) (2026-08-28)
+## [0.2.0](https://github.com/agentnameservice/ans-sdk-java/compare/v0.1.9...v0.2.0) (2026-08-28)
 
 
 ### Features
 
+* add support for verified identities ([#102](https://github.com/agentnameservice/ans-sdk-java/issues/102)) ([ef800c0](https://github.com/agentnameservice/ans-sdk-java/commit/ef800c069f43cba37d180bc9c4808285b84237e6))
 * sync with ans Discovery Profiles ([#101](https://github.com/agentnameservice/ans-sdk-java/issues/101)) ([a505742](https://github.com/agentnameservice/ans-sdk-java/commit/a50574231577b110adc6f4850bf788a65be93bdd))
 
 

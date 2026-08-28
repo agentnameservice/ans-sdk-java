@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.1.10](https://github.com/agentnameservice/ans-sdk-java/compare/v0.1.9...v0.1.10) (2026-08-28)
+
+
+### Features
+
+* sync with ans Discovery Profiles ([#101](https://github.com/agentnameservice/ans-sdk-java/issues/101)) ([a505742](https://github.com/agentnameservice/ans-sdk-java/commit/a50574231577b110adc6f4850bf788a65be93bdd))
+
+
+### Bug Fixes
+
+* improve logging for connection failures ([#96](https://github.com/agentnameservice/ans-sdk-java/issues/96)) ([86bf347](https://github.com/agentnameservice/ans-sdk-java/commit/86bf347539da625e26207a2243dcb27f9a0a7804))
+* Replace build-time OpenAPI generated models ([#100](https://github.com/agentnameservice/ans-sdk-java/issues/100)) ([c82194a](https://github.com/agentnameservice/ans-sdk-java/commit/c82194ab9aca69efd67bb76e20be6c61a7cc7996))
+
+
+### Documentation
+
+* adopt DCO and AI-disclosure contribution policy ([#90](https://github.com/agentnameservice/ans-sdk-java/issues/90)) ([b58cd82](https://github.com/agentnameservice/ans-sdk-java/commit/b58cd82bdac5bcdbc2bf154bb0246801d9cade19))
+
+
+### Miscellaneous
+
+* **deps:** Bump actions/cache from 5.0.5 to 6.1.0 ([#77](https://github.com/agentnameservice/ans-sdk-java/issues/77)) ([69d5363](https://github.com/agentnameservice/ans-sdk-java/commit/69d5363eb1dbe77c46c48e434b74c4dc6582a0e7))
+* **deps:** Bump actions/checkout from 7.0.0 to 7.0.1 ([#93](https://github.com/agentnameservice/ans-sdk-java/issues/93)) ([c4f7e4f](https://github.com/agentnameservice/ans-sdk-java/commit/c4f7e4f5ad0c4200e7c770ff9d448a83cdd63650))
+* **deps:** Bump actions/setup-java from 5.3.0 to 5.5.0 ([#80](https://github.com/agentnameservice/ans-sdk-java/issues/80)) ([4fdcbaa](https://github.com/agentnameservice/ans-sdk-java/commit/4fdcbaa93dd63b5e4208ca6cfce017e550dbd05f))
+* **deps:** Bump actions/setup-java from 5.5.0 to 5.6.0 ([#88](https://github.com/agentnameservice/ans-sdk-java/issues/88)) ([28b1658](https://github.com/agentnameservice/ans-sdk-java/commit/28b1658dd28e2064158c5330f5ce672b82e785d5))
+* **deps:** Bump actions/setup-java from 5.7.0 to 6.0.0 ([#106](https://github.com/agentnameservice/ans-sdk-java/issues/106)) ([22267e4](https://github.com/agentnameservice/ans-sdk-java/commit/22267e44398c9c57ee70c99d26ecb34038e7c649))
+* **deps:** Bump com.vanniktech.maven.publish from 0.36.0 to 0.37.0 ([#74](https://github.com/agentnameservice/ans-sdk-java/issues/74)) ([cf19333](https://github.com/agentnameservice/ans-sdk-java/commit/cf1933325fe98d40be2954ee5b281578544d434f))
+* **deps:** Bump gradle-wrapper from 9.6.0 to 9.6.1 ([#78](https://github.com/agentnameservice/ans-sdk-java/issues/78)) ([e9dd6bb](https://github.com/agentnameservice/ans-sdk-java/commit/e9dd6bbd68c0c91711435f9f46cc14e70e27bb7c))
+* **deps:** bump mcp 1.1.2 -&gt; 2.0.0 ([#79](https://github.com/agentnameservice/ans-sdk-java/issues/79)) ([fde7b24](https://github.com/agentnameservice/ans-sdk-java/commit/fde7b24db77c8247a9423a164afa72441636ed0a))
+* **deps:** Bump org.openapi.generator from 7.22.0 to 7.23.0 ([#72](https://github.com/agentnameservice/ans-sdk-java/issues/72)) ([7db3247](https://github.com/agentnameservice/ans-sdk-java/commit/7db32472a1070b34e9427f33303b5adf86a1789e))
+* **deps:** Bump org.openapi.generator from 7.23.0 to 7.24.0 ([#94](https://github.com/agentnameservice/ans-sdk-java/issues/94)) ([c920498](https://github.com/agentnameservice/ans-sdk-java/commit/c92049893799f0cbfa122476583d4295c95a9bb9))
+* **deps:** Bump the actions-minor-patch group across 1 directory with 2 updates ([#104](https://github.com/agentnameservice/ans-sdk-java/issues/104)) ([d3c7328](https://github.com/agentnameservice/ans-sdk-java/commit/d3c73287623e10e430f270670d330fbb12f2e48b))
+* **deps:** Bump the gradle-minor-patch group across 1 directory with 8 updates ([#105](https://github.com/agentnameservice/ans-sdk-java/issues/105)) ([0f9d79f](https://github.com/agentnameservice/ans-sdk-java/commit/0f9d79f902a1cd3890be6cc9db7c04e5144a8c70))
+
 ## [0.1.9](https://github.com/agentnameservice/ans-sdk-java/compare/v0.1.8...v0.1.9) (2026-06-29)
 
 

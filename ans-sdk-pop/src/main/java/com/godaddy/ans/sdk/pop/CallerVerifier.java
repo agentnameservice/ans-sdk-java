@@ -224,7 +224,7 @@ public final class CallerVerifier {
         return value;
     }
 
-    static String ansHost(String ansName) throws PopException {
+    public static String ansHost(String ansName) throws PopException {
         if (ansName == null || ansName.isBlank()) {
             throw new PopException(ErrorType.BINDING_FAILED, "ans name is missing");
         }

@@ -1,4 +1,5 @@
 val nimbusJoseVersion: String by project
+val caffeineVersion: String by project
 val bouncyCastleVersion: String by project
 val slf4jVersion: String by project
 val cborVersion: String by project
@@ -20,6 +21,9 @@ dependencies {
 
     // Nimbus JOSE + JWT for ES256 DPoP proof sign/verify
     implementation("com.nimbusds:nimbus-jose-jwt:$nimbusJoseVersion")
+
+    // Caffeine-backed replay cache (bounded jti single-use store)
+    implementation("com.github.ben-manes.caffeine:caffeine:$caffeineVersion")
 
     // Logging
     implementation("org.slf4j:slf4j-api:$slf4jVersion")

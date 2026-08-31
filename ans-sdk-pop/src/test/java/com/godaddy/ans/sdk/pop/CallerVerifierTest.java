@@ -269,6 +269,73 @@ class CallerVerifierTest {
         assertThat(ex.category()).isEqualTo(ErrorType.RECEIPT_INVALID);
     }
 
+    @Test
+    void createBuildsVerifier() {
+        assertThat(CallerVerifier.create("https://tl.example.com")).isNotNull();
+        assertThat(CallerVerifier.create("https://tl.example.com",
+            Duration.ofSeconds(30), Duration.ofSeconds(90))).isNotNull();
+    }
+
+    @Test
+    void accessTokenBindingAndInjectedClockAccepted() throws Exception {
+        String token = "Kz~8mXK1EalYznwH-LC-1fBAo.4Ljp~zsPE_NeO.gxU";
+        String proofWithAth = PopSigner.create((ECPrivateKey) keyPair.getPrivate(), cert.getEncoded())
+            .sign(METHOD, URL, token);
+
+        CallerIdentity identity = verifier().verifyParsed(
+            proofWithAth, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false),
+            CallerOptions.none().withAccessToken(token).withClock(Instant.now()));
+
+        assertThat(identity.agentId()).isEqualTo(AGENT_ID);
+    }
+
+    @Test
+    void receiptEventPayloadNotJsonRejected() {
+        ScittReceipt receipt = new ScittReceipt(null, null, null,
+            "not-json".getBytes(StandardCharsets.UTF_8), null);
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt, token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void ansHostRejectsNull() {
+        PopException ex = catchThrowableOfType(() -> CallerVerifier.ansHost(null), PopException.class);
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void ansHostRejectsBlank() {
+        PopException ex = catchThrowableOfType(() -> CallerVerifier.ansHost("  "), PopException.class);
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void ansHostAcceptsBareHostWithoutScheme() throws Exception {
+        assertThat(CallerVerifier.ansHost("Agent.Example.COM")).isEqualTo("agent.example.com");
+    }
+
+    @Test
+    void ansHostStripsVersionLabel() throws Exception {
+        assertThat(CallerVerifier.ansHost("ans://v1.2.3.agent.example.com")).isEqualTo("agent.example.com");
+    }
+
+    @Test
+    void ansHostRejectsInvalidUri() {
+        PopException ex = catchThrowableOfType(
+            () -> CallerVerifier.ansHost("ans://bad host with spaces"), PopException.class);
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void ansHostRejectsMissingAuthority() {
+        PopException ex = catchThrowableOfType(() -> CallerVerifier.ansHost("ans:///path"), PopException.class);
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
     private static final Duration DEFAULT_SKEW = Duration.ofSeconds(120);
 
     private static CallerVerifier verifier() {

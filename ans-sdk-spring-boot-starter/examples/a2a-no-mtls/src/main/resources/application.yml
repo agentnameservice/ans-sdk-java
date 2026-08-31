@@ -1,0 +1,6 @@
+server:
+  port: 8443
+
+pop:
+  expected-issuer: transparency.ans.ote-godaddy.com
+  trusted-host: ${POP_TRUSTED_HOST:server.example.com:8443}

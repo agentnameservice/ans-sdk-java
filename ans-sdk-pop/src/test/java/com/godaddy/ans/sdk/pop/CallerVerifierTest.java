@@ -139,7 +139,8 @@ class CallerVerifierTest {
     @Test
     void bindingRejectsMissingReceiptAgent() {
         ScittReceipt receipt = new ScittReceipt(null, null, null,
-            "{\"ansName\":\"ans://agent.example.com\"}".getBytes(StandardCharsets.UTF_8), null);
+            "{\"payload\":{\"producer\":{\"event\":{\"ansName\":\"ans://agent.example.com\"}}}}"
+                .getBytes(StandardCharsets.UTF_8), null);
         PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
             proofJws, receipt, token(ANS_NAME, AGENT_ID, certFingerprint),
             METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
@@ -351,7 +352,9 @@ class CallerVerifierTest {
     }
 
     private static ScittReceipt receipt(String agentId, String ansName) {
-        String json = "{\"agentId\":\"" + agentId + "\",\"ansName\":\"" + ansName + "\"}";
+        // Mirrors the reference TL envelope: the agent id (ansId) is nested at payload.producer.event.
+        String json = "{\"payload\":{\"producer\":{\"event\":"
+            + "{\"ansId\":\"" + agentId + "\",\"ansName\":\"" + ansName + "\"}}}}";
         return new ScittReceipt(null, null, null, json.getBytes(StandardCharsets.UTF_8), null);
     }
 

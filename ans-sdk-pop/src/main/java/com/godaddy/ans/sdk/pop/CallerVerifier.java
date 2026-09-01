@@ -175,26 +175,37 @@ public final class CallerVerifier {
         verifyReceiptAgent(receipt, token);
     }
 
-    // leaf event must name the same agent the status token does.
+    // The receipt's leaf event must name the same agent as the status token. The signed payload is the
+    // full transparency-log envelope; the agent UUID lives at payload.producer.event.ansId and matches
+    // StatusToken.agentId (see the reference TL V1/V2 event schema).
     private static void verifyReceiptAgent(ScittReceipt receipt, StatusToken token) throws PopException {
         byte[] payload = receipt.eventPayload();
         if (payload == null) {
             throw new PopException(ErrorType.BINDING_FAILED, "receipt has no event payload");
         }
-        Map<String, Object> event;
+        Map<String, Object> envelope;
         try {
-            event = JSONObjectUtils.parse(new String(payload, StandardCharsets.UTF_8));
+            envelope = JSONObjectUtils.parse(new String(payload, StandardCharsets.UTF_8));
         } catch (ParseException e) {
             throw new PopException(ErrorType.BINDING_FAILED, "receipt event payload is not valid JSON", e);
         }
-        Object agentId = event.get("agentId");
-        if (!(agentId instanceof String eventAgentId) || eventAgentId.isBlank()) {
+        Map<String, Object> event = nestedObject(nestedObject(nestedObject(envelope, "payload"),
+            "producer"), "event");
+        Object ansId = event.get("ansId");
+        if (!(ansId instanceof String eventAgentId) || eventAgentId.isBlank()) {
             throw new PopException(ErrorType.BINDING_FAILED, "receipt event payload has no agent id");
         }
         if (!eventAgentId.equals(token.agentId())) {
             throw new PopException(ErrorType.BINDING_FAILED,
                 "receipt agent does not match status token agent");
         }
+    }
+
+    // Returns the nested JSON object at key, or an empty map when it is absent or not an object, so a
+    // missing branch surfaces through the identity checks rather than as a null dereference.
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> nestedObject(Map<String, Object> parent, String key) {
+        return parent.get(key) instanceof Map<?, ?> child ? (Map<String, Object>) child : Map.of();
     }
 
     private ScittReceipt parseReceipt(Map<String, List<String>> headers) throws PopException {

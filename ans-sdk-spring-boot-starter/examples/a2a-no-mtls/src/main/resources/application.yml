@@ -1,6 +1,14 @@
 server:
   port: 8443
 
+# This server only verifies incoming DPoP requests (PopSecurityConfig). It does not
+# register or discover agents, so the ANS starter auto-config — which requires
+# ans.credentials.type — is switched off.
+ans:
+  enabled: false
+
 pop:
-  expected-issuer: transparency.ans.ote-godaddy.com
+  expected-issuer: ${POP_EXPECTED_ISSUER:transparency.ans.ote-godaddy.com}
   trusted-host: ${POP_TRUSTED_HOST:server.example.com:8443}
+  # Blank keeps the OTE default log; the e2e container points this at a local transparency log.
+  tl-url: ${POP_TL_URL:}

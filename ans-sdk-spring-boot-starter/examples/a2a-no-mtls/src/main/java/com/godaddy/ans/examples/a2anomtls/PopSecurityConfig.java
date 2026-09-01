@@ -17,7 +17,10 @@ import java.util.function.Supplier;
 public class PopSecurityConfig {
 
     @Bean
-    public TransparencyClient transparencyClient() {
+    public TransparencyClient transparencyClient(@Value("${pop.tl-url:}") String tlUrl) {
+        if (tlUrl != null && !tlUrl.isBlank()) {
+            return TransparencyClient.builder().baseUrl(tlUrl).build();
+        }
         return TransparencyClient.createOte();
     }
 

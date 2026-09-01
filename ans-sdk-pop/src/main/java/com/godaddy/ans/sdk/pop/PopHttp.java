@@ -6,8 +6,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+/** HTTP helpers for attaching and reading pop credentials on requests. */
 public final class PopHttp {
 
+    /** The HTTP header that carries the compact DPoP proof (RFC 9449). */
     public static final String DPOP_HEADER = "DPoP";
 
     private static final String DPOP_SCHEME = "DPoP";
@@ -15,6 +17,11 @@ public final class PopHttp {
     private PopHttp() {
     }
 
+    /**
+     * Signs a DPoP proof for the request and attaches it as the {@code DPoP}
+     * header, then copies the SCITT headers. When {@code accessToken} is
+     * non-null, the proof also binds it via ath (RFC 9449 §4.2 / §7.1).
+     */
     public static void attachIdentity(HttpRequest.Builder req, PopSigner signer,
             Map<String, List<String>> scittHeaders, String accessToken) throws PopException {
         Objects.requireNonNull(req, "req");
@@ -37,6 +44,18 @@ public final class PopHttp {
         }
     }
 
+    /**
+     * Returns the access token when an Authorization header value presents one
+     * under the DPoP auth scheme (RFC 9449 §7.1). Scheme comparison is
+     * case-insensitive (RFC 9110 §11.1). A Bearer or absent Authorization yields
+     * empty: such a token is not sender-constrained, so the proof must carry no
+     * ath.
+     *
+     * <p>A callee that completes token binding must use this rather than parsing
+     * the header itself. The verifier checks the proof's ath against exactly the
+     * bytes this returns. A second, subtly different parser in the handler would
+     * let the two halves of RFC 9449 §4.3 operate on different values.
+     */
     public static Optional<String> accessTokenFromAuthorization(String value) {
         if (value == null || value.length() <= DPOP_SCHEME.length()) {
             return Optional.empty();

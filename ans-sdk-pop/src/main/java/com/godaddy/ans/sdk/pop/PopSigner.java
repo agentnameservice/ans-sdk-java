@@ -24,8 +24,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Mints DPoP proofs for an agent's outbound A2A requests. It holds the agent's
+ * identity private key and the DER of the matching identity certificate — the
+ * certificate whose fingerprint the agent's status token vouches for. Build one
+ * with {@link #create(java.security.interfaces.ECPrivateKey, byte[])}.
+ */
 public final class PopSigner {
 
+    // jti entropy size (128 bits).
     private static final int JTI_BYTES = 16;
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -39,6 +46,12 @@ public final class PopSigner {
         this.jwk = jwk;
     }
 
+    /**
+     * Builds a signer from a P-256 private key and the DER of the identity
+     * certificate that binds the matching public key. It verifies the
+     * certificate's public key equals the private key's public key, so a signer
+     * can never emit a proof whose jwk or x5c disagrees with its signing key.
+     */
     public static PopSigner create(ECPrivateKey key, byte[] certDER) throws PopException {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(certDER, "certDER");
@@ -55,11 +68,23 @@ public final class PopSigner {
         return signInternal(method, url, null);
     }
 
+    /**
+     * Signs a proof and binds an OAuth2 access token via ath =
+     * base64url(SHA-256(token)) per RFC 9449 §4.2. Use this when the request
+     * presents the token as {@code Authorization: DPoP <token>} (RFC 9449 §7.1).
+     * A verifier enforces ath vs presented token in both directions.
+     */
     public String sign(String method, String url, String accessToken) throws PopException {
         Objects.requireNonNull(accessToken, "accessToken");
         return signInternal(method, url, accessToken);
     }
 
+    /**
+     * Returns the RFC 7638 thumbprint of the signer's public key — the value an
+     * authorization server records as an access token's cnf.jkt confirmation
+     * claim (RFC 9449 §6), and the value a callee compares against
+     * {@link CallerIdentity#jkt()}.
+     */
     public String jkt() throws PopException {
         return Proof.jkt(jwk);
     }

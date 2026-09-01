@@ -14,6 +14,12 @@ import java.security.interfaces.ECPublicKey;
 import java.text.ParseException;
 import java.util.Set;
 
+// Compact-JWS mechanics for DPoP proofs, pinned to this profile: proof type
+// "dpop+jwt", algorithm ES256, and no JOSE header parameter beyond
+// {typ, alg, jwk, x5c}. These pins plus the jwk and x5c requirements are the
+// whole downgrade policy — a proof with alg:"none", RS256, a smuggled "kid" or
+// "crit", or a private-key "d" member fails closed here, before any signature
+// work.
 final class Jws {
 
     static final JOSEObjectType DPOP_TYP = new JOSEObjectType("dpop+jwt");
@@ -23,6 +29,8 @@ final class Jws {
     private Jws() {
     }
 
+    // parses a compact JWS and rejects any header that is not
+    // exactly {typ, alg, jwk, x5c} with typ=dpop+jwt and alg=ES256.
     static JWSObject strictParse(String compactJws) throws PopException {
         JWSObject jws;
         try {

@@ -34,12 +34,29 @@ final class Proof {
     private Proof() {
     }
 
+    // Header is the protected header of a DPoP proof in this profile. It is
+    // exactly {typ, alg, jwk, x5c}: jwk is the bare public key RFC 9449 §4.2
+    // requires, so the proof is wire-conformant DPoP. x5c[0] is the ANS identity
+    // certificate tying the same key to the agent's ans:// name. The two MUST
+    // present the same key (matchJWKToCert), so the signature is only ever
+    // checked under one key. Header parsing rejects unknown fields — any other
+    // JOSE header parameter fails closed.
     record Header(JWSObject jws, ECKey jwk, X509Certificate cert, ECPublicKey publicKey) {
     }
 
+    // Claims holds the DPoP claims this profile binds: the HTTP method and
+    // normalized target URI (htm/htu), the issued-at (iat), a unique id (jti)
+    // for replay detection, and — only when the request also presents an OAuth2
+    // access token — that token's hash (ath). Additional claims are tolerated on
+    // the payload (DPoP permits them). Only the header is strictly decoded.
     record Claims(String htm, String htu, Instant iat, String jti, String ath) {
     }
 
+    // acceptES256DPoP decides which proofs this profile accepts: the pinned
+    // typ/alg pair, an EC/P-256 jwk, and exactly one x5c certificate. Trust
+    // comes from the status token, not a chain, so extra x5c entries are never
+    // consulted — accepting them silently would let a chain-walking verifier
+    // reach a different conclusion from this one over the same bytes.
     static Header acceptES256DPoP(String compactJws) throws PopException {
         JWSObject jws = Jws.strictParse(compactJws);
         JWSHeader header = jws.getHeader();
@@ -51,6 +68,11 @@ final class Proof {
         return new Header(jws, jwk, cert, matched);
     }
 
+    // matchJWKToCert enforces the dual-header invariant: the jwk and the x5c
+    // leaf certificate must present the same public key. The jwk's point is not
+    // validated independently — byte-equality with the parsed certificate key IS
+    // the validation, and verifying the signature under the certificate key is
+    // then also verifying it under the jwk key (RFC 9449 §4.3).
     static ECPublicKey matchJWKToCert(ECKey jwk, X509Certificate cert) throws PopException {
         ECPublicKey jwkKey;
         try {
@@ -80,6 +102,9 @@ final class Proof {
         return out;
     }
 
+    // jkt returns the RFC 7638 thumbprint of the public key. This is the value a
+    // DPoP-bound OAuth2 access token carries in its cnf.jkt confirmation claim
+    // (RFC 9449 §6), so a resource server compares it to complete token binding.
     static String jkt(ECKey jwk) throws PopException {
         try {
             return jwk.computeThumbprint().toString();
@@ -88,10 +113,16 @@ final class Proof {
         }
     }
 
+    // accessTokenHash is the RFC 9449 §4.2 ath value for an access token:
+    // base64url(SHA-256(token)).
     static String accessTokenHash(String accessToken) {
         return Base64Url.encode(sha256(accessToken.getBytes(StandardCharsets.UTF_8)));
     }
 
+    // normalizeHTU returns the RFC 9449 §4.3 htu form of rawUrl: scheme and host
+    // lowercased, the default port (:443 for https, :80 for http) dropped, query
+    // and fragment removed, and an empty path normalized to "/" (RFC 3986
+    // §6.2.3.
     static String normalizeHTU(String rawUrl) throws PopException {
         URI uri;
         try {
@@ -152,6 +183,10 @@ final class Proof {
         return ecKey;
     }
 
+    // extractLeafCertificate decodes and validates the x5c leaf — the caller's
+    // identity certificate. Only the leaf is consulted. There is no chain walk,
+    // because trust comes from the status token, not a CA chain. The leaf key
+    // must be ECDSA P-256.
     private static X509Certificate extractLeafCertificate(JWSHeader header) throws PopException {
         List<Base64> chain = header.getX509CertChain();
         if (chain == null || chain.size() != 1) {

@@ -26,6 +26,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+/**
+ * Authenticates a caller from its DPoP proof and SCITT headers, and returns
+ * the proven {@link CallerIdentity}. It composes the three proofs — possession
+ * (the DPoP proof), liveness (the status token), and identity (the receipt) —
+ * and binds them to one identity certificate.
+ */
 public final class CallerVerifier {
 
     private static final Logger LOG = LoggerFactory.getLogger(CallerVerifier.class);
@@ -83,14 +89,19 @@ public final class CallerVerifier {
 
             CallerOptions effectiveOptions = options != null ? options : CallerOptions.none();
 
+            // Possession: the caller holds the identity key, for this request.
+            // The jti is NOT recorded yet — see the recordReplay call below.
             DpopProofVerifier.Verified verified = verifyPossession(proofJWS, method, url, effectiveOptions);
             ProofResult proof = verified.result();
 
+            // Liveness and identity: the status token proves the certificate is
+            // currently valid, and the receipt anchors it in the transparency log.
             ScittExpectation expectation = scittVerifier.verify(receipt, token, rootKeys);
             if (!expectation.isVerified()) {
                 throw mapExpectation(expectation);
             }
 
+            // Bind all three to one agent: fingerprint, ans:// SAN, and receipt.
             verifyBinding(proof, receipt, token);
 
             if (effectiveOptions.expectedPeer() != null
@@ -99,6 +110,10 @@ public final class CallerVerifier {
                     "status token peer does not match expected peer");
             }
 
+            // Single-use: recorded last, once the proof is known to belong to an
+            // agent the transparency log vouches for. Recording earlier would let
+            // anyone with a self-signed certificate consume the bounded cache and
+            // fail authentication for every legitimate caller.
             proofVerifier.recordReplay(verified, replay);
 
             CallerIdentity identity = new CallerIdentity(
@@ -128,7 +143,10 @@ public final class CallerVerifier {
         return proofVerifier.verifyUnrecorded(proofJWS, method, url, now, popSkew, verifyOptions);
     }
 
+    // verifyBinding ties a verified proof, status token, and receipt to one
+    // agent.
     private void verifyBinding(ProofResult proof, ScittReceipt receipt, StatusToken token) throws PopException {
+        // 1. The proof's certificate fingerprint must be a vouched identity cert.
         String proofFingerprint = CertificateUtils.computeSha256Fingerprint(proof.cert());
         boolean fingerprintMatched = false;
         for (String expected : token.identityCertFingerprints()) {
@@ -142,6 +160,8 @@ public final class CallerVerifier {
                 "proof certificate is not in status token identity fingerprints");
         }
 
+        // 2. The certificate's own ans:// SAN must equal the status token ans
+        //    name. Fail closed if the cert carries no ans:// SAN.
         Optional<String> certAnsName = CertificateUtils.extractAnsName(proof.cert());
         if (certAnsName.isEmpty()) {
             throw new PopException(ErrorType.BINDING_FAILED, "proof certificate has no ans name SAN");
@@ -151,9 +171,11 @@ public final class CallerVerifier {
                 "proof ans host does not match status token ans host");
         }
 
+        // 3. The receipt's leaf must name the same agent as the status token.
         verifyReceiptAgent(receipt, token);
     }
 
+    // leaf event must name the same agent the status token does.
     private static void verifyReceiptAgent(ScittReceipt receipt, StatusToken token) throws PopException {
         byte[] payload = receipt.eventPayload();
         if (payload == null) {
@@ -224,6 +246,9 @@ public final class CallerVerifier {
         return value;
     }
 
+    // ansHost extracts the lowercased host from an ans:// name and strips a
+    // leading version label (vMAJOR.MINOR.PATCH.), so binding compares agents by
+    // host regardless of the version prefix.
     public static String ansHost(String ansName) throws PopException {
         if (ansName == null || ansName.isBlank()) {
             throw new PopException(ErrorType.BINDING_FAILED, "ans name is missing");

@@ -1,6 +1,6 @@
-# A2A no-mTLS Example
+# DPoP-SCITT Example
 
-This example shows sender-constrained caller authentication for ANS agent-to-agent (A2A) traffic without mutual TLS. The client proves that it holds its private key with a DPoP proof (RFC 9449). It sends the proof over a normal server-authenticated HTTPS connection. The server verifies the proof and the ANS identity with the `PopAuthenticationFilter`.
+This example shows sender-constrained caller authentication for ANS agent-to-agent traffic without mutual TLS. The client proves that it holds its private key with a DPoP proof (RFC 9449). It sends the proof over a normal server-authenticated HTTPS connection. The server verifies the proof and the ANS identity with the `PopAuthenticationFilter`.
 
 DPoP works together with SCITT. SCITT gives identity and liveness. The DPoP proof binds the request to the key that the caller holds. DPoP does not replace SCITT.
 
@@ -17,11 +17,11 @@ DPoP works together with SCITT. SCITT gives identity and liveness. The DPoP proo
 
 ## Run the server
 
-The server listens on port 8443 and protects `/a2a/*`. Set the trusted host to the public authority that clients use to reach the server. This pins the source of the `htu` binding.
+The server listens on port 8443 and protects `/*`. Set the trusted host to the public authority that clients use to reach the server. This pins the source of the `htu` binding.
 
 ```bash
 export POP_TRUSTED_HOST=server.example.com:8443
-./gradlew :ans-sdk-spring-boot-starter:examples:a2a-no-mtls:bootRun
+./gradlew :ans-sdk-spring-boot-starter:examples:dpop-scitt-auth:bootRun
 ```
 
 The configuration is in `application.yml`:
@@ -32,8 +32,8 @@ The configuration is in `application.yml`:
 ## Run the client
 
 ```bash
-./gradlew :ans-sdk-spring-boot-starter:examples:a2a-no-mtls:runClient \
-  --args="https://server.example.com:8443/a2a/whoami client.p12 changeit agent-key my-agent-id"
+./gradlew :ans-sdk-spring-boot-starter:examples:dpop-scitt-auth:runClient \
+  --args="https://server.example.com:8443/whoami client.p12 changeit agent-key my-agent-id"
 ```
 
 The arguments, in order:

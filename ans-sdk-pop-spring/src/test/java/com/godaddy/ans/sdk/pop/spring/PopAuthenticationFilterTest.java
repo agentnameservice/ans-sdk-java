@@ -1,6 +1,7 @@
-package com.godaddy.ans.sdk.spring;
+package com.godaddy.ans.sdk.pop.spring;
 
 import com.godaddy.ans.sdk.pop.CallerIdentity;
+import com.godaddy.ans.sdk.pop.CallerPolicy;
 import com.godaddy.ans.sdk.pop.CallerVerifier;
 import com.godaddy.ans.sdk.pop.ErrorType;
 import com.godaddy.ans.sdk.pop.PopException;
@@ -62,7 +63,11 @@ class PopAuthenticationFilterTest {
                                                   Supplier<Map<String, PublicKey>> rootKeys,
                                                   Function<HttpServletRequest, String> externalUrl,
                                                   Set<String> trustedHosts, Set<String> allowedHosts) {
-        return new PopAuthenticationFilter(verifier, rootKeys, REPLAY, externalUrl, trustedHosts, allowedHosts);
+        CallerPolicy policy = CallerPolicy.builder()
+            .trustedHosts(trustedHosts.toArray(new String[0]))
+            .allowedAnsNames(allowedHosts.toArray(new String[0]))
+            .build();
+        return new PopAuthenticationFilter(verifier, rootKeys, REPLAY, externalUrl, policy);
     }
 
     private static MockHttpServletRequest request() {
@@ -324,11 +329,10 @@ class PopAuthenticationFilterTest {
     }
 
     @Test
-    void builderResolvesExpectedAndAllowedAnsNames() {
+    void builderResolvesAllowedAnsNames() {
         PopAuthenticationFilter filter = PopAuthenticationFilter
             .builder("issuer.example.com", ROOT_KEYS, REPLAY)
-            .withExpectedAnsName("ans://a.example.com")
-            .withAllowedAnsNames("ans://b.example.com", "ans://c.example.com")
+            .withAllowedAnsNames("ans://a.example.com", "ans://b.example.com", "ans://c.example.com")
             .build();
 
         assertThat(filter).isNotNull();
@@ -345,42 +349,10 @@ class PopAuthenticationFilterTest {
     }
 
     @Test
-    void builderProbesExternalUrlAgainstAllRequestAccessors() {
-        // Exercises every branch of the probe request proxy: switch cases and primitive-return defaults.
-        Function<HttpServletRequest, String> externalUrl = req -> {
-            req.getRequestURL();
-            req.getServletPath();
-            req.getMethod();
-            req.getScheme();
-            req.getServerName();
-            req.getServerPort();
-            req.isSecure();
-            req.getContentLength();
-            req.getContentLengthLong();
-            return "https://gateway.example.com" + req.getRequestURI();
-        };
-        PopAuthenticationFilter filter = PopAuthenticationFilter
-            .builder("issuer.example.com", ROOT_KEYS, REPLAY)
-            .withExternalUrl(externalUrl)
-            .build();
-
-        assertThat(filter).isNotNull();
-    }
-
-    @Test
-    void builderRejectsPathIndependentExternalUrl() {
-        assertThatIllegalArgumentException().isThrownBy(() -> PopAuthenticationFilter
-            .builder("issuer.example.com", ROOT_KEYS, REPLAY)
-            .withExternalUrl(req -> "https://gateway.example.com/fixed")
-            .build())
-            .withMessageContaining("ignores the request path");
-    }
-
-    @Test
     void builderRejectsInvalidAllowedAnsName() {
         assertThatIllegalArgumentException().isThrownBy(() -> PopAuthenticationFilter
             .builder("issuer.example.com", ROOT_KEYS, REPLAY)
-            .withExpectedAnsName("ans://")
+            .withAllowedAnsNames("ans://")
             .build())
             .withMessageContaining("invalid allowed ans name");
     }
@@ -419,7 +391,6 @@ class PopAuthenticationFilterTest {
             PopAuthenticationFilter.builder("issuer", ROOT_KEYS, REPLAY);
 
         assertThatNullPointerException().isThrownBy(() -> builder.withExternalUrl(null));
-        assertThatNullPointerException().isThrownBy(() -> builder.withExpectedAnsName(null));
         assertThatNullPointerException().isThrownBy(() -> builder.withAllowedAnsNames((String) null));
         assertThatNullPointerException().isThrownBy(() -> builder.withPoPSkew(null));
     }

@@ -1,12 +1,12 @@
-package com.godaddy.ans.sdk.spring;
+package com.godaddy.ans.sdk.pop.spring;
 
 import com.godaddy.ans.sdk.pop.CallerIdentity;
 import com.godaddy.ans.sdk.pop.CallerOptions;
+import com.godaddy.ans.sdk.pop.CallerPolicy;
 import com.godaddy.ans.sdk.pop.CallerVerifier;
 import com.godaddy.ans.sdk.pop.PopException;
 import com.godaddy.ans.sdk.pop.PopHttp;
 import com.godaddy.ans.sdk.pop.ReplayCache;
-import com.godaddy.ans.sdk.transparency.scitt.ScittHeaders;
 import com.godaddy.ans.sdk.transparency.scitt.StatusToken;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -17,8 +17,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Proxy;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.PublicKey;
@@ -26,13 +24,10 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -40,27 +35,21 @@ public final class PopAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger LOG = LoggerFactory.getLogger(PopAuthenticationFilter.class);
 
-    private static final List<String> SECURITY_HEADERS = List.of(
-        PopHttp.DPOP_HEADER, "Authorization",
-        ScittHeaders.SCITT_RECEIPT_HEADER, ScittHeaders.STATUS_TOKEN_HEADER);
-
     private final CallerVerifier verifier;
     private final Supplier<Map<String, PublicKey>> rootKeys;
     private final ReplayCache replay;
     private final Function<HttpServletRequest, String> externalUrl;
-    private final Set<String> trustedHosts;
-    private final Set<String> allowedHosts;
+    private final CallerPolicy policy;
 
-    // Package-private for tests: lets a test inject a stubbed verifier and pre-resolved host sets.
+    // Package-private for tests: lets a test inject a stubbed verifier and a pre-built policy.
     PopAuthenticationFilter(CallerVerifier verifier, Supplier<Map<String, PublicKey>> rootKeys,
                                     ReplayCache replay, Function<HttpServletRequest, String> externalUrl,
-                                    Set<String> trustedHosts, Set<String> allowedHosts) {
+                                    CallerPolicy policy) {
         this.verifier = verifier;
         this.rootKeys = rootKeys;
         this.replay = replay;
         this.externalUrl = externalUrl;
-        this.trustedHosts = trustedHosts;
-        this.allowedHosts = allowedHosts;
+        this.policy = policy;
     }
 
     public static Builder builder(String expectedIssuer, Supplier<Map<String, PublicKey>> rootKeys,
@@ -71,12 +60,13 @@ public final class PopAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        for (String header : SECURITY_HEADERS) {
-            if (countHeaders(request, header) > 1) {
-                LOG.info("caller rejected: MALFORMED_PROOF - duplicate {} header", header);
-                reject(response);
-                return;
-            }
+        Map<String, List<String>> headers = headerMap(request);
+
+        Optional<String> duplicate = policy.duplicateSecurityHeader(headers);
+        if (duplicate.isPresent()) {
+            LOG.info("caller rejected: MALFORMED_PROOF - duplicate {} header", duplicate.get());
+            reject(response);
+            return;
         }
 
         if (!checkAuthority(request)) {
@@ -109,14 +99,19 @@ public final class PopAuthenticationFilter extends OncePerRequestFilter {
 
         CallerIdentity identity;
         try {
-            identity = verifier.verifyCaller(proof, headerMap(request), request.getMethod(),
+            identity = verifier.verifyCaller(proof, headers, request.getMethod(),
                 resolveUrl(request), keys, replay, options);
         } catch (PopException e) {
+            LOG.info("caller rejected: {} - {}", e.category(), e.getMessage());
+            reject(response);
+            return;
+        } catch (RuntimeException e) {
+            LOG.error("caller rejected: unexpected verification error", e);
             reject(response);
             return;
         }
 
-        if (!allowedHosts.isEmpty() && !allowedByHost(identity)) {
+        if (!policy.callerAllowed(identity)) {
             LOG.info("caller rejected: EXPECTED_PEER_MISMATCH - caller ans host is not in the accepted set");
             reject(response);
             return;
@@ -126,35 +121,23 @@ public final class PopAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    private boolean allowedByHost(CallerIdentity identity) {
-        try {
-            return allowedHosts.contains(CallerVerifier.ansHost(identity.ansName()));
-        } catch (PopException e) {
-            return false;
-        }
-    }
-
     private boolean checkAuthority(HttpServletRequest request) {
-        if (trustedHosts.isEmpty()) {
+        if (policy.trustsAnyAuthority()) {
             return true;
         }
-        String authority;
+        return policy.authorityTrusted(deriveAuthority(request));
+    }
+
+    private String deriveAuthority(HttpServletRequest request) {
         if (externalUrl != null) {
             try {
-                authority = new URI(externalUrl.apply(request)).getAuthority();
+                return new URI(externalUrl.apply(request)).getAuthority();
             } catch (URISyntaxException e) {
-                return false;
-            }
-        } else {
-            authority = request.getHeader("Host");
-            if (authority == null) {
-                authority = request.getServerName();
+                return null;
             }
         }
-        if (authority == null) {
-            return false;
-        }
-        return trustedHosts.contains(normalizeAuthority(authority));
+        String authority = request.getHeader("Host");
+        return authority != null ? authority : request.getServerName();
     }
 
     private String resolveUrl(HttpServletRequest request) {
@@ -181,30 +164,9 @@ public final class PopAuthenticationFilter extends OncePerRequestFilter {
         return headers;
     }
 
-    private static int countHeaders(HttpServletRequest request, String name) {
-        Enumeration<String> values = request.getHeaders(name);
-        int count = 0;
-        while (values != null && values.hasMoreElements()) {
-            values.nextElement();
-            count++;
-        }
-        return count;
-    }
-
     private static void reject(HttpServletResponse response) throws IOException {
         response.setHeader("WWW-Authenticate", PopHttp.DPOP_HEADER);
         response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "unauthorized");
-    }
-
-    private static String normalizeAuthority(String host) {
-        String normalized = host.trim().toLowerCase(Locale.ROOT);
-        if (normalized.endsWith(":443")) {
-            return normalized.substring(0, normalized.length() - 4);
-        }
-        if (normalized.endsWith(":80")) {
-            return normalized.substring(0, normalized.length() - 3);
-        }
-        return normalized;
     }
 
     public static final class Builder {
@@ -212,8 +174,8 @@ public final class PopAuthenticationFilter extends OncePerRequestFilter {
         private final String expectedIssuer;
         private final Supplier<Map<String, PublicKey>> rootKeys;
         private final ReplayCache replay;
-        private final Set<String> trustedHosts = new HashSet<>();
-        private final List<String> allowedNames = new ArrayList<>();
+        private final CallerPolicy.Builder policy = CallerPolicy.builder();
+        private boolean trustedHostsSet;
         private Function<HttpServletRequest, String> externalUrl;
         private Duration popSkew;
 
@@ -223,36 +185,34 @@ public final class PopAuthenticationFilter extends OncePerRequestFilter {
             this.replay = Objects.requireNonNull(replay, "replay");
         }
 
+        /**
+         * Sets a function that maps a request to its external URL. The filter uses the result as
+         * the {@code htu} (HTTP target URI) that PoP proofs bind to.
+         *
+         * <p>The function must vary with the request path. Append the request path - for example
+         * {@code request.getRequestURI()} - to the external authority. A function that returns a
+         * constant URL, or ignores the path, breaks {@code htu} binding. Every request then
+         * produces the same {@code htu}, so a proof no longer binds to a specific request target.
+         * This is a security defect.
+         *
+         * @param externalUrl maps a request to its full external URL, including the request path
+         * @return this builder
+         */
         public Builder withExternalUrl(Function<HttpServletRequest, String> externalUrl) {
             this.externalUrl = Objects.requireNonNull(externalUrl, "externalUrl");
             return this;
         }
 
         public Builder withTrustedHosts(String... hosts) {
-            for (String host : hosts) {
-                if (host == null) {
-                    continue;
-                }
-                String normalized = normalizeAuthority(host);
-                if (!normalized.isEmpty()) {
-                    trustedHosts.add(normalized);
-                }
+            policy.trustedHosts(hosts);
+            if (hosts.length > 0) {
+                trustedHostsSet = true;
             }
-            if (hosts.length > 0 && trustedHosts.isEmpty()) {
-                throw new IllegalArgumentException("withTrustedHosts: every supplied host was empty");
-            }
-            return this;
-        }
-
-        public Builder withExpectedAnsName(String ansName) {
-            allowedNames.add(Objects.requireNonNull(ansName, "ansName"));
             return this;
         }
 
         public Builder withAllowedAnsNames(String... ansNames) {
-            for (String ansName : ansNames) {
-                allowedNames.add(Objects.requireNonNull(ansName, "ansName"));
-            }
+            policy.allowedAnsNames(ansNames);
             return this;
         }
 
@@ -262,71 +222,15 @@ public final class PopAuthenticationFilter extends OncePerRequestFilter {
         }
 
         public PopAuthenticationFilter build() {
-            if (externalUrl != null) {
-                probeExternalUrl(externalUrl);
-            }
-            if (externalUrl == null && trustedHosts.isEmpty()) {
+            if (externalUrl == null && !trustedHostsSet) {
                 LOG.warn("htu will be derived from the client-controlled Host header; "
                     + "set withExternalUrl or withTrustedHosts before production");
-            }
-            Set<String> resolvedAllowed = new HashSet<>();
-            for (String ansName : allowedNames) {
-                try {
-                    resolvedAllowed.add(CallerVerifier.ansHost(ansName));
-                } catch (PopException e) {
-                    throw new IllegalArgumentException("invalid allowed ans name: " + ansName, e);
-                }
             }
             CallerVerifier verifier = popSkew != null
                 ? CallerVerifier.create(expectedIssuer, StatusToken.DEFAULT_CLOCK_SKEW, popSkew)
                 : CallerVerifier.create(expectedIssuer);
-            return new PopAuthenticationFilter(verifier, rootKeys, replay, externalUrl,
-                Set.copyOf(trustedHosts), resolvedAllowed);
+            return new PopAuthenticationFilter(verifier, rootKeys, replay, externalUrl, policy.build());
         }
 
-        private static void probeExternalUrl(Function<HttpServletRequest, String> fn) {
-            String first = fn.apply(probeRequest("/pop-probe-a"));
-            String second = fn.apply(probeRequest("/pop-probe-b"));
-            if (Objects.equals(first, second)) {
-                throw new IllegalArgumentException("withExternalUrl function ignores the request path; "
-                    + "htu would not bind the request target - append request.getRequestURI() to the authority");
-            }
-        }
-
-        private static HttpServletRequest probeRequest(String path) {
-            InvocationHandler handler = (proxy, method, args) -> {
-                switch (method.getName()) {
-                    case "getRequestURI":
-                    case "getServletPath":
-                        return path;
-                    case "getRequestURL":
-                        return new StringBuffer("https://probe.invalid").append(path);
-                    case "getMethod":
-                        return "GET";
-                    case "getScheme":
-                        return "https";
-                    case "getServerName":
-                        return "probe.invalid";
-                    case "getServerPort":
-                        return 443;
-                    default:
-                        break;
-                }
-                Class<?> returnType = method.getReturnType();
-                if (returnType.equals(boolean.class)) {
-                    return false;
-                }
-                if (returnType.equals(int.class)) {
-                    return 0;
-                }
-                if (returnType.equals(long.class)) {
-                    return 0L;
-                }
-                return null;
-            };
-            return (HttpServletRequest) Proxy.newProxyInstance(
-                PopAuthenticationFilter.class.getClassLoader(),
-                new Class<?>[] {HttpServletRequest.class}, handler);
-        }
     }
 }

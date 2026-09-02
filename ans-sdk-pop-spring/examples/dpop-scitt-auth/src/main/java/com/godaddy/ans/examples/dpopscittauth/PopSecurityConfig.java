@@ -1,8 +1,8 @@
-package com.godaddy.ans.examples.a2anomtls;
+package com.godaddy.ans.examples.dpopscittauth;
 
 import com.godaddy.ans.sdk.pop.CaffeineReplayCache;
 import com.godaddy.ans.sdk.pop.ReplayCache;
-import com.godaddy.ans.sdk.spring.PopAuthenticationFilter;
+import com.godaddy.ans.sdk.pop.spring.PopAuthenticationFilter;
 import com.godaddy.ans.sdk.transparency.TransparencyClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -44,7 +44,7 @@ public class PopSecurityConfig {
             .build();
 
         FilterRegistrationBean<PopAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
-        registration.addUrlPatterns("/a2a/*");
+        registration.addUrlPatterns("/*");
         return registration;
     }
 }

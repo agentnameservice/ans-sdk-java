@@ -1,7 +1,7 @@
-package com.godaddy.ans.examples.a2anomtls;
+package com.godaddy.ans.examples.dpopscittauth;
 
 import com.godaddy.ans.sdk.pop.CallerIdentity;
-import com.godaddy.ans.sdk.spring.PopAuthentication;
+import com.godaddy.ans.sdk.pop.spring.PopAuthentication;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @RestController
-@RequestMapping("/a2a")
+@RequestMapping("/")
 public class ProtectedController {
 
     @GetMapping("/whoami")

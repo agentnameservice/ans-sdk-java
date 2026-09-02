@@ -1,4 +1,4 @@
-package com.godaddy.ans.examples.a2anomtls;
+package com.godaddy.ans.examples.dpopscittauth;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

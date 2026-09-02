@@ -3,12 +3,30 @@ package com.godaddy.ans.sdk.pop;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Expiry;
+import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.github.benmanes.caffeine.cache.Ticker;
 
 import java.time.Duration;
 import java.util.Objects;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * In-JVM replay cache backed by Caffeine.
+ *
+ * <p><b>Scope:</b> replay protection is per-process. Entries are not shared across
+ * replicas, so a proof replayed to a different instance within its freshness window
+ * is accepted. Multi-replica deployments need a distributed {@link ReplayCache}
+ * (for example Redis) or sticky routing to keep a single-use guarantee.
+ *
+ * <p><b>Sizing:</b> {@code maxEntries} bounds memory. Size-based eviction can drop a
+ * still-fresh jti under load and reopen a replay window for it. Set {@code maxEntries}
+ * above the peak count of vouched requests within one freshness window, with headroom.
+ */
 public final class CaffeineReplayCache implements ReplayCache {
+
+    private static final Logger LOG = LoggerFactory.getLogger(CaffeineReplayCache.class);
 
     private final Cache<String, Duration> cache;
 
@@ -26,6 +44,12 @@ public final class CaffeineReplayCache implements ReplayCache {
             .maximumSize(maxEntries)
             .expireAfter(Expiry.creating((String key, Duration ttl) -> ttl))
             .ticker(ticker)
+            .evictionListener((String key, Duration ttl, RemovalCause cause) -> {
+                if (cause == RemovalCause.SIZE) {
+                    LOG.warn("replay cache evicted a live entry due to size; "
+                            + "increase maxEntries to preserve replay protection");
+                }
+            })
             .build();
         return new CaffeineReplayCache(cache);
     }

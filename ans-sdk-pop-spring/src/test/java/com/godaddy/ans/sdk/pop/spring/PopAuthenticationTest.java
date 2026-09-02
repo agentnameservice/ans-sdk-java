@@ -1,4 +1,4 @@
-package com.godaddy.ans.sdk.spring;
+package com.godaddy.ans.sdk.pop.spring;
 
 import com.godaddy.ans.sdk.pop.CallerIdentity;
 import org.junit.jupiter.api.Test;

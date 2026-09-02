@@ -1,4 +1,4 @@
-package com.godaddy.ans.examples.a2anomtls;
+package com.godaddy.ans.examples.dpopscittauth;
 
 import com.godaddy.ans.sdk.pop.PopHttp;
 import com.godaddy.ans.sdk.pop.PopSigner;
@@ -26,7 +26,7 @@ public final class PopClientExample {
         if (args.length < 5) {
             System.out.println("Usage: runClient <serverUrl> <keystorePath> <keystorePassword> "
                 + "<keyAlias> <agentId>");
-            System.out.println("Example: runClient https://server.example.com:8443/a2a/whoami "
+            System.out.println("Example: runClient https://server.example.com:8443/whoami "
                 + "client.p12 changeit agent-key my-agent-id");
             System.exit(1);
         }
@@ -38,7 +38,7 @@ public final class PopClientExample {
         String agentId = args[4];
 
         System.out.println("===========================================");
-        System.out.println("ANS SDK - A2A no-mTLS Client (DPoP over server-auth HTTPS)");
+        System.out.println("ANS SDK - DPOP-SCITT Client (DPoP over server-auth HTTPS)");
         System.out.println("===========================================");
         System.out.println("Target: " + serverUrl);
 

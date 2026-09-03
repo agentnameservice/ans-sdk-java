@@ -82,5 +82,11 @@ public enum ErrorType {
      * The proven caller is not the peer the callee was configured to accept
      * (see {@link CallerOptions#withExpectedPeer(String)}).
      */
-    EXPECTED_PEER_MISMATCH
+    EXPECTED_PEER_MISMATCH,
+    /**
+     * The proof's ans_content_digest and the request body disagree: a digest
+     * present with no body-hash supplied, a required body-hash with no digest,
+     * or a hash mismatch (ANS-6 §7.13). Mirrors ath binding in both directions.
+     */
+    CONTENT_BINDING_MISMATCH
 }

@@ -180,6 +180,41 @@ class PopSignerTest {
     }
 
     @Test
+    void signWithContentAddsDigest() throws Exception {
+        PopSigner signer = PopSigner.create((ECPrivateKey) p256A.getPrivate(), certA.getEncoded());
+        byte[] body = "request-body".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        String compact = signer.sign("POST", "https://api.example.com/x", body);
+
+        Proof.Claims claims = Proof.parseClaims(Proof.acceptES256DPoP(compact).jws().getPayload());
+        assertThat(claims.ansContentDigest()).isEqualTo(Proof.contentDigest(body));
+        assertThat(claims.ath()).isNull();
+    }
+
+    @Test
+    void signWithEmptyContentHasNoDigest() throws Exception {
+        PopSigner signer = PopSigner.create((ECPrivateKey) p256A.getPrivate(), certA.getEncoded());
+
+        String compact = signer.sign("POST", "https://api.example.com/x", new byte[0]);
+
+        Proof.Claims claims = Proof.parseClaims(Proof.acceptES256DPoP(compact).jws().getPayload());
+        assertThat(claims.ansContentDigest()).isNull();
+    }
+
+    @Test
+    void signWithTokenAndContentAddsBoth() throws Exception {
+        PopSigner signer = PopSigner.create((ECPrivateKey) p256A.getPrivate(), certA.getEncoded());
+        String token = "Kz~8mXK1EalYznwH-LC-1fBAo.4Ljp~zsPE_NeO.gxU";
+        byte[] body = "request-body".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        String compact = signer.sign("POST", "https://api.example.com/x", token, body);
+
+        Proof.Claims claims = Proof.parseClaims(Proof.acceptES256DPoP(compact).jws().getPayload());
+        assertThat(claims.ath()).isEqualTo(Proof.accessTokenHash(token));
+        assertThat(claims.ansContentDigest()).isEqualTo(Proof.contentDigest(body));
+    }
+
+    @Test
     void signRejectsInvalidUrl() throws Exception {
         PopSigner signer = PopSigner.create((ECPrivateKey) p256A.getPrivate(), certA.getEncoded());
 

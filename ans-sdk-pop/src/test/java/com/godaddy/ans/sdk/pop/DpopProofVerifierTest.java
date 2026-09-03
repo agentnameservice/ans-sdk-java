@@ -344,6 +344,107 @@ class DpopProofVerifierTest {
         assertThat(result).isNotNull();
     }
 
+    @Test
+    void rejectsExpiredCertificate() throws Exception {
+        Instant now = Instant.parse("2026-08-28T12:00:00Z");
+        X509Certificate expired = selfSigned(keyA,
+            Date.from(now.minusSeconds(7200)), Date.from(now.minusSeconds(3600)));
+        String proof = PopSigner.create((ECPrivateKey) keyA.getPrivate(), expired.getEncoded())
+            .sign(METHOD, URL);
+
+        PopException ex = catchThrowableOfType(
+            () -> verifier.verify(proof, METHOD, URL, now, DpopProofVerifier.DEFAULT_SKEW, cache(), null),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.CERT_INVALID);
+    }
+
+    @Test
+    void rejectsNotYetValidCertificate() throws Exception {
+        Instant now = Instant.parse("2026-08-28T12:00:00Z");
+        X509Certificate notYetValid = selfSigned(keyA,
+            Date.from(now.plusSeconds(3600)), Date.from(now.plusSeconds(7200)));
+        String proof = PopSigner.create((ECPrivateKey) keyA.getPrivate(), notYetValid.getEncoded())
+            .sign(METHOD, URL);
+
+        PopException ex = catchThrowableOfType(
+            () -> verifier.verify(proof, METHOD, URL, now, DpopProofVerifier.DEFAULT_SKEW, cache(), null),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.CERT_INVALID);
+    }
+
+    @Test
+    void rejectsContentDigestWithoutOption() throws Exception {
+        String proof = signerA().sign(METHOD, URL, "body".getBytes(StandardCharsets.UTF_8));
+
+        PopException ex = catchThrowableOfType(
+            () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(), VerifyOptions.none()),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.CONTENT_BINDING_MISMATCH);
+    }
+
+    @Test
+    void acceptsMissingContentWhenNotRequired() throws Exception {
+        String proof = signerA().sign(METHOD, URL);
+        byte[] bodyHash = sha256("body".getBytes(StandardCharsets.UTF_8));
+
+        ProofResult result = verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(),
+            VerifyOptions.none().withContentSha256(bodyHash));
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void rejectsMissingContentWhenRequired() throws Exception {
+        String proof = signerA().sign(METHOD, URL);
+        byte[] bodyHash = sha256("body".getBytes(StandardCharsets.UTF_8));
+
+        PopException ex = catchThrowableOfType(
+            () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(),
+                VerifyOptions.none().withContentSha256(bodyHash).withRequiredContentBinding()),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.CONTENT_BINDING_MISMATCH);
+    }
+
+    @Test
+    void acceptsMatchingContent() throws Exception {
+        byte[] body = "the-request-body".getBytes(StandardCharsets.UTF_8);
+        String proof = signerA().sign(METHOD, URL, body);
+
+        ProofResult result = verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(),
+            VerifyOptions.none().withContentSha256(sha256(body)).withRequiredContentBinding());
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void rejectsContentMismatch() throws Exception {
+        String proof = signerA().sign(METHOD, URL, "real-body".getBytes(StandardCharsets.UTF_8));
+        byte[] otherHash = sha256("tampered-body".getBytes(StandardCharsets.UTF_8));
+
+        PopException ex = catchThrowableOfType(
+            () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(),
+                VerifyOptions.none().withContentSha256(otherHash)),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.CONTENT_BINDING_MISMATCH);
+    }
+
+    @Test
+    void rejectsBadLengthContentSha256() throws Exception {
+        String proof = signerA().sign(METHOD, URL);
+
+        PopException ex = catchThrowableOfType(
+            () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(),
+                VerifyOptions.none().withContentSha256(new byte[16])),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.MISCONFIGURED);
+    }
+
     private static Map<String, Object> baseClaims(Instant iat) {
         Map<String, Object> claims = new LinkedHashMap<>();
         claims.put("htm", METHOD);
@@ -376,9 +477,11 @@ class DpopProofVerifierTest {
     }
 
     private static X509Certificate selfSigned(KeyPair pair) throws Exception {
+        return selfSigned(pair, new Date(1_600_000_000_000L), new Date(4_100_000_000_000L));
+    }
+
+    private static X509Certificate selfSigned(KeyPair pair, Date notBefore, Date notAfter) throws Exception {
         X500Name subject = new X500Name("CN=test");
-        Date notBefore = new Date(1_600_000_000_000L);
-        Date notAfter = new Date(4_100_000_000_000L);
         JcaX509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(
             subject, BigInteger.valueOf(1), notBefore, notAfter, subject, pair.getPublic());
         builder.addExtension(Extension.basicConstraints, true, new BasicConstraints(false));

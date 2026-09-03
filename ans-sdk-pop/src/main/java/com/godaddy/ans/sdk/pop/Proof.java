@@ -46,10 +46,12 @@ final class Proof {
 
     // Claims holds the DPoP claims this profile binds: the HTTP method and
     // normalized target URI (htm/htu), the issued-at (iat), a unique id (jti)
-    // for replay detection, and — only when the request also presents an OAuth2
-    // access token — that token's hash (ath). Additional claims are tolerated on
-    // the payload (DPoP permits them). Only the header is strictly decoded.
-    record Claims(String htm, String htu, Instant iat, String jti, String ath) {
+    // for replay detection, the access-token hash (ath) present only when the
+    // request also presents an OAuth2 access token, and the request-body hash
+    // (ans_content_digest) present only when the caller binds the body (ANS-6
+    // §7.13). Additional claims are tolerated on the payload (DPoP permits
+    // them). Only the header is strictly decoded.
+    record Claims(String htm, String htu, Instant iat, String jti, String ath, String ansContentDigest) {
     }
 
     // acceptES256DPoP decides which proofs this profile accepts: the pinned
@@ -119,6 +121,13 @@ final class Proof {
         return Base64Url.encode(sha256(accessToken.getBytes(StandardCharsets.UTF_8)));
     }
 
+    // contentDigest is the ANS-6 §7.13 ans_content_digest value for a request
+    // body: base64url(SHA-256(content)). It mirrors ath but binds the body
+    // rather than an access token.
+    static String contentDigest(byte[] content) {
+        return Base64Url.encode(sha256(content));
+    }
+
     // normalizeHTU returns the RFC 9449 §4.3 htu form of rawUrl: scheme and host
     // lowercased, the default port (:443 for https, :80 for http) dropped, query
     // and fragment removed, and an empty path normalized to "/" (RFC 3986
@@ -166,7 +175,8 @@ final class Proof {
             stringClaim(map, "htu"),
             instantClaim(map, "iat"),
             stringClaim(map, "jti"),
-            stringClaim(map, "ath"));
+            stringClaim(map, "ath"),
+            stringClaim(map, "ans_content_digest"));
     }
 
     private static ECKey extractPublicEcKey(JWSHeader header) throws PopException {

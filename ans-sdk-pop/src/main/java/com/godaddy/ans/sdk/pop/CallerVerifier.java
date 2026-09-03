@@ -139,6 +139,12 @@ public final class CallerVerifier {
         VerifyOptions verifyOptions = options.accessToken() != null
             ? VerifyOptions.withAccessToken(options.accessToken())
             : VerifyOptions.none();
+        if (options.contentSha256() != null) {
+            verifyOptions = verifyOptions.withContentSha256(options.contentSha256());
+        }
+        if (options.requireContentBinding()) {
+            verifyOptions = verifyOptions.withRequiredContentBinding();
+        }
         Instant now = options.clock() != null ? options.clock() : Instant.now();
         return proofVerifier.verifyUnrecorded(proofJWS, method, url, now, popSkew, verifyOptions);
     }
@@ -191,6 +197,16 @@ public final class CallerVerifier {
         }
         Map<String, Object> event = nestedObject(nestedObject(nestedObject(envelope, "payload"),
             "producer"), "event");
+
+        Object ansName = event.get("ansName");
+        if (!(ansName instanceof String eventAnsName) || eventAnsName.isBlank()) {
+            throw new PopException(ErrorType.BINDING_FAILED, "receipt event payload has no ans name");
+        }
+        if (!eventAnsName.equalsIgnoreCase(token.ansName())) {
+            throw new PopException(ErrorType.BINDING_FAILED,
+                "receipt ans name does not match status token ans name");
+        }
+
         Object ansId = event.get("ansId");
         if (!(ansId instanceof String eventAgentId) || eventAgentId.isBlank()) {
             throw new PopException(ErrorType.BINDING_FAILED, "receipt event payload has no agent id");

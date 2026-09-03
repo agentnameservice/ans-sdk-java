@@ -37,6 +37,8 @@ public final class DpopProofVerifier {
      * cache (no boundary gap). Cache retention = iat + skew + grace.
      */
     static final Duration REPLAY_GRACE = Duration.ofSeconds(5);
+    // A pre-hashed request-body digest must be a full SHA-256 (ANS-6 §7.13).
+    private static final int SHA256_BYTES = 32;
 
     private static final Logger LOG = LoggerFactory.getLogger(DpopProofVerifier.class);
 
@@ -103,6 +105,14 @@ public final class DpopProofVerifier {
 
         Proof.Header header = Proof.acceptES256DPoP(proofJWS);
 
+        // §7.4 step 3 / §7.5: the x5c leaf's validity period MUST contain the
+        // current time. The status token cannot supply this bound — identity-cert
+        // rotation is additive and a sealed event's validIdentityCerts array is
+        // immutable, so nothing ever prunes a rotated-away or expired certificate.
+        // The certificate's own notAfter is the only expiry the system carries for
+        // it. Allow the §7.4 step 9 skew tolerance at both edges.
+        verifyCertValidity(header.cert(), now, effectiveSkew);
+
         if (!Jws.verify(header.jws(), header.publicKey())) {
             throw new PopException(ErrorType.SIGNATURE_INVALID, "proof signature is invalid");
         }
@@ -119,6 +129,9 @@ public final class DpopProofVerifier {
         }
 
         verifyAth(claims.ath(), effectiveOptions.accessToken());
+
+        verifyContentBinding(claims.ansContentDigest(), effectiveOptions.contentSha256(),
+            effectiveOptions.requireContentBinding());
 
         Instant iat = claims.iat();
         if (iat == null) {
@@ -194,6 +207,56 @@ public final class DpopProofVerifier {
                 expected.getBytes(StandardCharsets.UTF_8),
                 proofAth.getBytes(StandardCharsets.UTF_8))) {
             throw new PopException(ErrorType.TOKEN_BINDING_MISMATCH, "ath does not match presented access token");
+        }
+    }
+
+    /**
+     * Enforces ans_content_digest vs the request body (ANS-6 §7.13), mirroring
+     * ath. A proof carrying a digest is never accepted without a body hash to
+     * check it against; a supplied body hash demands a matching digest only when
+     * {@code requireBinding} is set, so an endpoint that does not require content
+     * binding still accepts a proof that omits the digest. A wrong-length body
+     * hash is a wiring error (MISCONFIGURED), not a mismatch.
+     */
+    private static void verifyContentBinding(String proofDigest, byte[] contentSha256, boolean requireBinding)
+            throws PopException {
+        boolean bodyPresented = contentSha256 != null;
+        boolean digestPresent = proofDigest != null;
+
+        if (bodyPresented && contentSha256.length != SHA256_BYTES) {
+            throw new PopException(ErrorType.MISCONFIGURED, "contentSha256 must be exactly 32 bytes");
+        }
+        if (!bodyPresented) {
+            if (digestPresent) {
+                throw new PopException(ErrorType.CONTENT_BINDING_MISMATCH,
+                    "proof binds request content but no body hash was supplied");
+            }
+            return;
+        }
+        if (!digestPresent) {
+            if (requireBinding) {
+                throw new PopException(ErrorType.CONTENT_BINDING_MISMATCH,
+                    "content binding required but proof carries no ans_content_digest");
+            }
+            return;
+        }
+        // The body hash arrives pre-hashed, so the expected digest is a straight
+        // base64url encoding — Proof.contentDigest would hash it a second time.
+        String expected = Base64Url.encode(contentSha256);
+        if (!MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.UTF_8),
+                proofDigest.getBytes(StandardCharsets.UTF_8))) {
+            throw new PopException(ErrorType.CONTENT_BINDING_MISMATCH,
+                "ans_content_digest does not match request body");
+        }
+    }
+
+    private static void verifyCertValidity(X509Certificate cert, Instant now, Duration skew) throws PopException {
+        Instant notBefore = cert.getNotBefore().toInstant();
+        Instant notAfter = cert.getNotAfter().toInstant();
+        if (now.plus(skew).isBefore(notBefore) || now.minus(skew).isAfter(notAfter)) {
+            throw new PopException(ErrorType.CERT_INVALID,
+                "x5c leaf certificate validity period does not contain the current time");
         }
     }
 

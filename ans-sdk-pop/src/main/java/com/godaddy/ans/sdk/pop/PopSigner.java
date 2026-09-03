@@ -65,7 +65,7 @@ public final class PopSigner {
     }
 
     public String sign(String method, String url) throws PopException {
-        return signInternal(method, url, null);
+        return signInternal(method, url, null, null);
     }
 
     /**
@@ -76,7 +76,29 @@ public final class PopSigner {
      */
     public String sign(String method, String url, String accessToken) throws PopException {
         Objects.requireNonNull(accessToken, "accessToken");
-        return signInternal(method, url, accessToken);
+        return signInternal(method, url, accessToken, null);
+    }
+
+    /**
+     * Signs a proof and binds the request body via ans_content_digest =
+     * base64url(SHA-256(content)) per ANS-6 §7.13. An empty body carries no
+     * digest claim, so a verifier that does not require content binding still
+     * accepts it. A verifier enforces the digest vs the body in both directions.
+     */
+    public String sign(String method, String url, byte[] content) throws PopException {
+        Objects.requireNonNull(content, "content");
+        return signInternal(method, url, null, content);
+    }
+
+    /**
+     * Signs a proof binding both an OAuth2 access token (ath, RFC 9449 §4.2) and
+     * the request body (ans_content_digest, ANS-6 §7.13). An empty body carries
+     * no digest claim.
+     */
+    public String sign(String method, String url, String accessToken, byte[] content) throws PopException {
+        Objects.requireNonNull(accessToken, "accessToken");
+        Objects.requireNonNull(content, "content");
+        return signInternal(method, url, accessToken, content);
     }
 
     /**
@@ -89,7 +111,7 @@ public final class PopSigner {
         return Proof.jkt(jwk);
     }
 
-    private String signInternal(String method, String url, String accessToken) throws PopException {
+    private String signInternal(String method, String url, String accessToken, byte[] content) throws PopException {
         Objects.requireNonNull(method, "method");
         Objects.requireNonNull(url, "url");
 
@@ -108,6 +130,9 @@ public final class PopSigner {
         claims.put("jti", newJti());
         if (accessToken != null) {
             claims.put("ath", Proof.accessTokenHash(accessToken));
+        }
+        if (content != null && content.length > 0) {
+            claims.put("ans_content_digest", Proof.contentDigest(content));
         }
 
         return Jws.sign(header, new Payload(claims), privateKey);

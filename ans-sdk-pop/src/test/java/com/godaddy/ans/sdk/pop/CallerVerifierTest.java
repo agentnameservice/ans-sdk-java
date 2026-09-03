@@ -149,6 +149,50 @@ class CallerVerifierTest {
     }
 
     @Test
+    void bindingRejectsReceiptAnsNameMismatch() {
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, "ans://impostor.example.com"),
+            token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void bindingRejectsReceiptAnsNameVersionMismatch() {
+        // Cert SAN and token share the host, so the host check passes; the receipt and token differ only
+        // in the version segment, which must bind through the full-name comparison.
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, "ans://v2.0.0.agent.example.com"),
+            token("ans://v1.2.3.agent.example.com", AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void bindingAcceptsReceiptAnsNameCaseInsensitively() throws Exception {
+        CallerIdentity identity = verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, "ANS://Agent.Example.Com"),
+            token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none());
+
+        assertThat(identity.agentId()).isEqualTo(AGENT_ID);
+    }
+
+    @Test
+    void bindingRejectsMissingReceiptAnsName() {
+        ScittReceipt receipt = new ScittReceipt(null, null, null,
+            ("{\"payload\":{\"producer\":{\"event\":{\"ansId\":\"" + AGENT_ID + "\"}}}}")
+                .getBytes(StandardCharsets.UTF_8), null);
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt, token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
     void replayNotConsumedWhenLaterCheckFails() {
         CountingReplay replay = new CountingReplay(false);
         catchThrowableOfType(() -> verifier().verifyParsed(
@@ -292,6 +336,34 @@ class CallerVerifierTest {
     }
 
     @Test
+    void contentBindingAcceptedThroughCaller() throws Exception {
+        byte[] body = "the-request-body".getBytes(StandardCharsets.UTF_8);
+        String proofWithContent = PopSigner.create((ECPrivateKey) keyPair.getPrivate(), cert.getEncoded())
+            .sign(METHOD, URL, body);
+
+        CallerIdentity identity = verifier().verifyParsed(
+            proofWithContent, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false),
+            CallerOptions.none().withContentSha256(sha256(body)).withRequiredContentBinding());
+
+        assertThat(identity.agentId()).isEqualTo(AGENT_ID);
+    }
+
+    @Test
+    void contentBindingMismatchRejectedThroughCaller() throws Exception {
+        String proofWithContent = PopSigner.create((ECPrivateKey) keyPair.getPrivate(), cert.getEncoded())
+            .sign(METHOD, URL, "real-body".getBytes(StandardCharsets.UTF_8));
+
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofWithContent, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false),
+            CallerOptions.none().withContentSha256(sha256("tampered-body".getBytes(StandardCharsets.UTF_8)))),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.CONTENT_BINDING_MISMATCH);
+    }
+
+    @Test
     void receiptEventPayloadNotJsonRejected() {
         ScittReceipt receipt = new ScittReceipt(null, null, null,
             "not-json".getBytes(StandardCharsets.UTF_8), null);
@@ -356,6 +428,10 @@ class CallerVerifierTest {
         String json = "{\"payload\":{\"producer\":{\"event\":"
             + "{\"ansId\":\"" + agentId + "\",\"ansName\":\"" + ansName + "\"}}}}";
         return new ScittReceipt(null, null, null, json.getBytes(StandardCharsets.UTF_8), null);
+    }
+
+    private static byte[] sha256(byte[] input) throws Exception {
+        return java.security.MessageDigest.getInstance("SHA-256").digest(input);
     }
 
     private static KeyPair ec() throws Exception {

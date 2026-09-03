@@ -16,6 +16,42 @@ class CallerOptionsTest {
         assertThat(options.accessToken()).isNull();
         assertThat(options.expectedPeer()).isNull();
         assertThat(options.clock()).isNull();
+        assertThat(options.contentSha256()).isNull();
+        assertThat(options.requireContentBinding()).isFalse();
+    }
+
+    @Test
+    void withContentSha256CopiesArrayAndPreservesOthers() {
+        Instant now = Instant.parse("2026-08-28T12:00:00Z");
+        byte[] hash = new byte[32];
+        hash[0] = 1;
+        CallerOptions options = CallerOptions.none()
+            .withAccessToken("token")
+            .withExpectedPeer("ans://peer.example.com")
+            .withClock(now)
+            .withContentSha256(hash);
+
+        hash[0] = 2;
+
+        assertThat(options.contentSha256()[0]).isEqualTo((byte) 1);
+        assertThat(options.accessToken()).isEqualTo("token");
+        assertThat(options.expectedPeer()).isEqualTo("ans://peer.example.com");
+        assertThat(options.clock()).isEqualTo(now);
+    }
+
+    @Test
+    void withRequiredContentBindingSetsFlagAndPreservesContent() {
+        CallerOptions options = CallerOptions.none()
+            .withContentSha256(new byte[32])
+            .withRequiredContentBinding();
+
+        assertThat(options.requireContentBinding()).isTrue();
+        assertThat(options.contentSha256()).hasSize(32);
+    }
+
+    @Test
+    void withContentSha256RejectsNull() {
+        assertThatNullPointerException().isThrownBy(() -> CallerOptions.none().withContentSha256(null));
     }
 
     @Test

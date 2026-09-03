@@ -88,5 +88,11 @@ public enum ErrorType {
      * present with no body-hash supplied, a required body-hash with no digest,
      * or a hash mismatch (ANS-6 §7.13). Mirrors ath binding in both directions.
      */
-    CONTENT_BINDING_MISMATCH
+    CONTENT_BINDING_MISMATCH,
+    /**
+     * The proof's ans_profile claim selects a rule-set revision this verifier
+     * does not implement (ANS-6 §7.12). Absent means revision 1; only revision 1
+     * is accepted. Any other value fails closed before the HTTP binding checks.
+     */
+    UNSUPPORTED_PROFILE
 }

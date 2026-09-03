@@ -215,6 +215,16 @@ class PopSignerTest {
     }
 
     @Test
+    void signEmitsProfileOne() throws Exception {
+        PopSigner signer = PopSigner.create((ECPrivateKey) p256A.getPrivate(), certA.getEncoded());
+
+        String compact = signer.sign("POST", "https://api.example.com/x");
+
+        Proof.Claims claims = Proof.parseClaims(Proof.acceptES256DPoP(compact).jws().getPayload());
+        assertThat(claims.ansProfile()).isEqualTo(1L);
+    }
+
+    @Test
     void signRejectsInvalidUrl() throws Exception {
         PopSigner signer = PopSigner.create((ECPrivateKey) p256A.getPrivate(), certA.getEncoded());
 

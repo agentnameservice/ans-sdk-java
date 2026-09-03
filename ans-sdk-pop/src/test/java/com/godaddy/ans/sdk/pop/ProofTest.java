@@ -380,6 +380,36 @@ class ProofTest {
         assertThat(ex.category()).isEqualTo(ErrorType.MALFORMED_PROOF);
     }
 
+    @Test
+    void parseClaimsReadsProfileAndDefaultsToNull() throws Exception {
+        Proof.Claims withProfile = Proof.parseClaims(new Payload(Map.of(
+            "htm", "GET", "htu", "https://api.example.com/", "iat", 1700000000L, "jti", "id",
+            "ans_profile", 1)));
+        assertThat(withProfile.ansProfile()).isEqualTo(1L);
+
+        Proof.Claims withoutProfile = Proof.parseClaims(new Payload(Map.of(
+            "htm", "GET", "htu", "https://api.example.com/", "iat", 1700000000L, "jti", "id")));
+        assertThat(withoutProfile.ansProfile()).isNull();
+    }
+
+    @Test
+    void parseClaimsRejectsNonIntegralProfile() {
+        Payload payload = new Payload(Map.of("ans_profile", 1.5));
+
+        PopException ex = catchThrowableOfType(() -> Proof.parseClaims(payload), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.MALFORMED_PROOF);
+    }
+
+    @Test
+    void parseClaimsRejectsNonNumberProfile() {
+        Payload payload = new Payload(Map.of("ans_profile", "one"));
+
+        PopException ex = catchThrowableOfType(() -> Proof.parseClaims(payload), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.MALFORMED_PROOF);
+    }
+
     private static KeyPair ec(String curve) throws Exception {
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("EC");
         kpg.initialize(new ECGenParameterSpec(curve));

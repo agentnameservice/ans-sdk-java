@@ -445,6 +445,54 @@ class DpopProofVerifierTest {
         assertThat(ex.category()).isEqualTo(ErrorType.MISCONFIGURED);
     }
 
+    @Test
+    void acceptsAbsentProfile() throws Exception {
+        Map<String, Object> claims = baseClaims(Instant.now());
+        String proof = craft(claims, (ECPrivateKey) keyA.getPrivate());
+
+        ProofResult result = verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(), null);
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void acceptsProfileOne() throws Exception {
+        Map<String, Object> claims = baseClaims(Instant.now());
+        claims.put("ans_profile", 1);
+        String proof = craft(claims, (ECPrivateKey) keyA.getPrivate());
+
+        ProofResult result = verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(), null);
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void rejectsUnsupportedProfile() throws Exception {
+        Map<String, Object> claims = baseClaims(Instant.now());
+        claims.put("ans_profile", 2);
+        String proof = craft(claims, (ECPrivateKey) keyA.getPrivate());
+
+        PopException ex = catchThrowableOfType(
+            () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(), null),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.UNSUPPORTED_PROFILE);
+    }
+
+    @Test
+    void rejectsUnsupportedProfileBeforeHtm() throws Exception {
+        Map<String, Object> claims = baseClaims(Instant.now());
+        claims.put("htm", "GET");
+        claims.put("ans_profile", 2);
+        String proof = craft(claims, (ECPrivateKey) keyA.getPrivate());
+
+        PopException ex = catchThrowableOfType(
+            () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(), null),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.UNSUPPORTED_PROFILE);
+    }
+
     private static Map<String, Object> baseClaims(Instant iat) {
         Map<String, Object> claims = new LinkedHashMap<>();
         claims.put("htm", METHOD);

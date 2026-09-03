@@ -34,6 +34,8 @@ public final class PopSigner {
 
     // jti entropy size (128 bits).
     private static final int JTI_BYTES = 16;
+    // ans_profile revision this signer emits on every proof (ANS-6 §7.12).
+    private static final int ANS_PROFILE_REVISION = 1;
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final ECPrivateKey privateKey;
@@ -128,6 +130,7 @@ public final class PopSigner {
         claims.put("htu", htu);
         claims.put("iat", Instant.now().getEpochSecond());
         claims.put("jti", newJti());
+        claims.put("ans_profile", ANS_PROFILE_REVISION);
         if (accessToken != null) {
             claims.put("ath", Proof.accessTokenHash(accessToken));
         }

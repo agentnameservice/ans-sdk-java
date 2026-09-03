@@ -39,6 +39,8 @@ public final class DpopProofVerifier {
     static final Duration REPLAY_GRACE = Duration.ofSeconds(5);
     // A pre-hashed request-body digest must be a full SHA-256 (ANS-6 §7.13).
     private static final int SHA256_BYTES = 32;
+    // The only ans_profile revision this verifier implements (ANS-6 §7.12).
+    private static final long ANS_PROFILE_REVISION = 1;
 
     private static final Logger LOG = LoggerFactory.getLogger(DpopProofVerifier.class);
 
@@ -119,6 +121,8 @@ public final class DpopProofVerifier {
 
         Proof.Claims claims = Proof.parseClaims(header.jws().getPayload());
 
+        verifyProfileRevision(claims.ansProfile());
+
         if (!method.equals(claims.htm())) {
             throw new PopException(ErrorType.HTTP_BINDING_MISMATCH, "htm does not match request method");
         }
@@ -185,6 +189,21 @@ public final class DpopProofVerifier {
         if (replay.checkAndStore(verified.replayKey(), verified.replayTtl())) {
             throw new PopException(ErrorType.REPLAY, "jti has already been used");
         }
+    }
+
+    /**
+     * Enforces the ANS-6 §7.12 profile revision before any HTTP binding check.
+     * An absent claim means revision 1, and only revision 1 is implemented, so
+     * any other revision fails closed here rather than being interpreted under
+     * rules this verifier does not have. A non-integral value is already rejected
+     * during claim parsing.
+     */
+    private static void verifyProfileRevision(Long ansProfile) throws PopException {
+        if (ansProfile == null || ansProfile == ANS_PROFILE_REVISION) {
+            return;
+        }
+        throw new PopException(ErrorType.UNSUPPORTED_PROFILE,
+            "ans_profile revision " + ansProfile + " is not supported");
     }
 
     /**

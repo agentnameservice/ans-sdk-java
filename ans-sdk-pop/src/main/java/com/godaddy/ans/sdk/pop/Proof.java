@@ -47,11 +47,13 @@ final class Proof {
     // Claims holds the DPoP claims this profile binds: the HTTP method and
     // normalized target URI (htm/htu), the issued-at (iat), a unique id (jti)
     // for replay detection, the access-token hash (ath) present only when the
-    // request also presents an OAuth2 access token, and the request-body hash
+    // request also presents an OAuth2 access token, the request-body hash
     // (ans_content_digest) present only when the caller binds the body (ANS-6
-    // §7.13). Additional claims are tolerated on the payload (DPoP permits
-    // them). Only the header is strictly decoded.
-    record Claims(String htm, String htu, Instant iat, String jti, String ath, String ansContentDigest) {
+    // §7.13), and the profile revision (ans_profile) that selects the rule set
+    // (ANS-6 §7.12). Additional claims are tolerated on the payload (DPoP
+    // permits them). Only the header is strictly decoded.
+    record Claims(String htm, String htu, Instant iat, String jti, String ath, String ansContentDigest,
+                  Long ansProfile) {
     }
 
     // acceptES256DPoP decides which proofs this profile accepts: the pinned
@@ -176,7 +178,8 @@ final class Proof {
             instantClaim(map, "iat"),
             stringClaim(map, "jti"),
             stringClaim(map, "ath"),
-            stringClaim(map, "ans_content_digest"));
+            stringClaim(map, "ans_content_digest"),
+            profileClaim(map, "ans_profile"));
     }
 
     private static ECKey extractPublicEcKey(JWSHeader header) throws PopException {
@@ -255,6 +258,25 @@ final class Proof {
             throw new PopException(ErrorType.MALFORMED_PROOF, "claim " + name + " must be a number");
         }
         return Instant.ofEpochSecond(n.longValue());
+    }
+
+    // profileClaim decodes ans_profile as an integral revision number. A
+    // non-numeric value, or a fractional one like 1.5, is rejected rather than
+    // truncated — silently reading 1.5 as revision 1 would let a caller signal a
+    // revision it never asserted (ANS-6 §7.12).
+    private static Long profileClaim(Map<String, Object> map, String name) throws PopException {
+        Object value = map.get(name);
+        if (value == null) {
+            return null;
+        }
+        if (!(value instanceof Number n)) {
+            throw new PopException(ErrorType.MALFORMED_PROOF, "claim " + name + " must be a number");
+        }
+        long asLong = n.longValue();
+        if (n.doubleValue() != (double) asLong) {
+            throw new PopException(ErrorType.MALFORMED_PROOF, "claim " + name + " must be an integer");
+        }
+        return asLong;
     }
 
     private static byte[] sha256(byte[] input) {

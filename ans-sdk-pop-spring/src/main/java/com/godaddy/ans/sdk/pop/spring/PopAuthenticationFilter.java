@@ -223,8 +223,9 @@ public final class PopAuthenticationFilter extends OncePerRequestFilter {
 
         public PopAuthenticationFilter build() {
             if (externalUrl == null && !trustedHostsSet) {
-                LOG.warn("htu will be derived from the client-controlled Host header; "
-                    + "set withExternalUrl or withTrustedHosts before production");
+                throw new IllegalStateException(
+                        "htu would be derived from the client-controlled Host header; "
+                                + "call withExternalUrl(...) or withTrustedHosts(...) before build()");
             }
             CallerVerifier verifier = popSkew != null
                 ? CallerVerifier.create(expectedIssuer, StatusToken.DEFAULT_CLOCK_SKEW, popSkew)

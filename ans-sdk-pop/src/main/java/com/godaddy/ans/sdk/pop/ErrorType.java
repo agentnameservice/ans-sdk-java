@@ -26,9 +26,9 @@ public enum ErrorType {
     /** A jti already seen within the freshness window. */
     REPLAY,
     /**
-     * Reserved: the replay cache is at capacity and cannot record the proof id.
-     * The in-process cache does not raise this today — see the replay-cache
-     * capacity finding.
+     * The replay cache is at capacity and cannot record the proof id. The proof
+     * is rejected (fail closed) rather than admitted, since an unrecorded id
+     * reopens the replay window it exists to close.
      */
     REPLAY_CACHE_FULL,
     /** A proof whose signature does not verify under the x5c leaf key. */

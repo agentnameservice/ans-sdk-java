@@ -5,12 +5,14 @@ import com.godaddy.ans.sdk.pop.ReplayCache;
 import com.godaddy.ans.sdk.pop.spring.PopAuthenticationFilter;
 import com.godaddy.ans.sdk.transparency.TransparencyClient;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.security.PublicKey;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 @Configuration
@@ -30,13 +32,19 @@ public class PopSecurityConfig {
     }
 
     @Bean
+    ApplicationRunner warmRootKeys(TransparencyClient client) {
+        return args -> client.getRootKeysAsync().join();
+    }
+
+    @Bean
     public FilterRegistrationBean<PopAuthenticationFilter> popAuthenticationFilter(
             TransparencyClient transparencyClient,
             ReplayCache replayCache,
             @Value("${pop.expected-issuer}") String expectedIssuer,
             @Value("${pop.trusted-host}") String trustedHost) {
 
-        Supplier<Map<String, PublicKey>> rootKeys = () -> transparencyClient.getRootKeysAsync().join();
+        Supplier<Map<String, PublicKey>> rootKeys =
+                () -> transparencyClient.getRootKeysAsync().orTimeout(2, TimeUnit.SECONDS).join();
 
         PopAuthenticationFilter filter = PopAuthenticationFilter
             .builder(expectedIssuer, rootKeys, replayCache)

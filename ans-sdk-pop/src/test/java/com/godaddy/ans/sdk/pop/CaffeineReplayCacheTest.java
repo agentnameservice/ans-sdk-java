@@ -7,22 +7,22 @@ import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CaffeineReplayCacheTest {
 
     private static final Duration TTL = Duration.ofSeconds(245);
 
     @Test
-    void freshKeyReturnsFalse() {
+    void freshKeyReturnsFalse() throws Exception {
         CaffeineReplayCache cache = CaffeineReplayCache.create(128);
 
         assertThat(cache.checkAndStore("jti-1", TTL)).isFalse();
     }
 
     @Test
-    void secondCallSameKeyReturnsSeen() {
+    void secondCallSameKeyReturnsSeen() throws Exception {
         CaffeineReplayCache cache = CaffeineReplayCache.create(128);
 
         assertThat(cache.checkAndStore("jti-1", TTL)).isFalse();
@@ -30,18 +30,31 @@ class CaffeineReplayCacheTest {
     }
 
     @Test
-    void overCapacityEvictsAndNeverThrows() {
+    void atCapacityFailsClosed() throws Exception {
         CaffeineReplayCache cache = CaffeineReplayCache.create(1);
 
-        assertThatCode(() -> {
-            for (int i = 0; i < 10_000; i++) {
-                cache.checkAndStore("jti-" + i, TTL);
-            }
-        }).doesNotThrowAnyException();
+        assertThat(cache.checkAndStore("jti-1", TTL)).isFalse();
+
+        assertThatThrownBy(() -> cache.checkAndStore("jti-2", TTL))
+            .isInstanceOf(PopException.class)
+            .extracting(e -> ((PopException) e).category())
+            .isEqualTo(ErrorType.REPLAY_CACHE_FULL);
     }
 
     @Test
-    void afterTtlKeyReadmitted() {
+    void lenAndCapReportSaturation() throws Exception {
+        CaffeineReplayCache cache = CaffeineReplayCache.create(128);
+
+        assertThat(cache.cap()).isEqualTo(128);
+        assertThat(cache.len()).isZero();
+
+        cache.checkAndStore("jti-1", TTL);
+
+        assertThat(cache.len()).isEqualTo(1);
+    }
+
+    @Test
+    void afterTtlKeyReadmitted() throws Exception {
         AtomicLong nanos = new AtomicLong(0);
         Ticker ticker = nanos::get;
         CaffeineReplayCache cache = CaffeineReplayCache.create(128, ticker);
@@ -55,7 +68,7 @@ class CaffeineReplayCacheTest {
     }
 
     @Test
-    void withinTtlStillSeen() {
+    void withinTtlStillSeen() throws Exception {
         AtomicLong nanos = new AtomicLong(0);
         Ticker ticker = nanos::get;
         CaffeineReplayCache cache = CaffeineReplayCache.create(128, ticker);
@@ -68,7 +81,7 @@ class CaffeineReplayCacheTest {
     }
 
     @Test
-    void perEntryTtlHonored() {
+    void perEntryTtlHonored() throws Exception {
         AtomicLong nanos = new AtomicLong(0);
         Ticker ticker = nanos::get;
         CaffeineReplayCache cache = CaffeineReplayCache.create(128, ticker);
@@ -83,7 +96,7 @@ class CaffeineReplayCacheTest {
     }
 
     @Test
-    void repeatedCallDoesNotRefreshExpiry() {
+    void repeatedCallDoesNotRefreshExpiry() throws Exception {
         AtomicLong nanos = new AtomicLong(0);
         Ticker ticker = nanos::get;
         CaffeineReplayCache cache = CaffeineReplayCache.create(128, ticker);

@@ -312,6 +312,7 @@ class PopAuthenticationFilterTest {
     void builderBuildsWithDefaults() {
         PopAuthenticationFilter filter = PopAuthenticationFilter
             .builder("issuer.example.com", ROOT_KEYS, REPLAY)
+            .withTrustedHosts("rp.example.com:443")
             .build();
 
         assertThat(filter).isNotNull();
@@ -333,6 +334,7 @@ class PopAuthenticationFilterTest {
         PopAuthenticationFilter filter = PopAuthenticationFilter
             .builder("issuer.example.com", ROOT_KEYS, REPLAY)
             .withAllowedAnsNames("ans://a.example.com", "ans://b.example.com", "ans://c.example.com")
+            .withTrustedHosts("rp.example.com:443")
             .build();
 
         assertThat(filter).isNotNull();
@@ -352,6 +354,7 @@ class PopAuthenticationFilterTest {
     void builderRejectsInvalidAllowedAnsName() {
         assertThatIllegalArgumentException().isThrownBy(() -> PopAuthenticationFilter
             .builder("issuer.example.com", ROOT_KEYS, REPLAY)
+            .withTrustedHosts("rp.example.com:443")
             .withAllowedAnsNames("ans://")
             .build())
             .withMessageContaining("invalid allowed ans name");

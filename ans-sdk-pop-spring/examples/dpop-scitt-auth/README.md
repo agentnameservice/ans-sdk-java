@@ -21,7 +21,7 @@ The server listens on port 8443 and protects `/*`. Set the trusted host to the p
 
 ```bash
 export POP_TRUSTED_HOST=server.example.com:8443
-./gradlew :ans-sdk-spring-boot-starter:examples:dpop-scitt-auth:bootRun
+./gradlew :ans-sdk-pop-spring:examples:dpop-scitt-auth:bootRun
 ```
 
 The configuration is in `application.yml`:
@@ -32,7 +32,7 @@ The configuration is in `application.yml`:
 ## Run the client
 
 ```bash
-./gradlew :ans-sdk-spring-boot-starter:examples:dpop-scitt-auth:runClient \
+./gradlew :ans-sdk-pop-spring:examples:dpop-scitt-auth:runClient \
   --args="https://server.example.com:8443/whoami client.p12 changeit agent-key my-agent-id"
 ```
 

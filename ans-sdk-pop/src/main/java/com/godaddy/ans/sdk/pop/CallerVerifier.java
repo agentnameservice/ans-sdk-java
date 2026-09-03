@@ -181,9 +181,7 @@ public final class CallerVerifier {
         verifyReceiptAgent(receipt, token);
     }
 
-    // The receipt's leaf event must name the same agent as the status token. The signed payload is the
-    // full transparency-log envelope; the agent UUID lives at payload.producer.event.ansId and matches
-    // StatusToken.agentId (see the reference TL V1/V2 event schema).
+    // The receipt's leaf event must name the same agent as the status token, bound by ansName and agentId.
     private static void verifyReceiptAgent(ScittReceipt receipt, StatusToken token) throws PopException {
         byte[] payload = receipt.eventPayload();
         if (payload == null) {

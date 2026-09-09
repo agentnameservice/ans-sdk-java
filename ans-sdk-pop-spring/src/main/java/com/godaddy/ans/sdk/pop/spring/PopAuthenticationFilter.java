@@ -203,6 +203,17 @@ public final class PopAuthenticationFilter extends OncePerRequestFilter {
             return this;
         }
 
+        /**
+         * Validates the {@code htu} host against a fixed list of trusted hosts.
+         *
+         * <p>Warning: if you set only trusted hosts and do not set {@link #withExternalUrl},
+         * the {@code htu} authority comes from the client-controlled {@code Host} header. For
+         * proxied or multi-tenant deployments, use {@link #withExternalUrl} to pin the authority
+         * independent of client headers.
+         *
+         * @param hosts trusted host authorities
+         * @return this builder
+         */
         public Builder withTrustedHosts(String... hosts) {
             policy.trustedHosts(hosts);
             if (hosts.length > 0) {

@@ -25,6 +25,15 @@ public record CallerIdentity(
     byte[] fingerprint,
     String jkt) {
 
+    public CallerIdentity {
+        fingerprint = fingerprint.clone();
+    }
+
+    @Override
+    public byte[] fingerprint() {
+        return fingerprint.clone();
+    }
+
     /** Returns the identity-certificate fingerprint as lowercase hex. */
     public String fingerprintHex() {
         return HexFormat.of().formatHex(fingerprint);

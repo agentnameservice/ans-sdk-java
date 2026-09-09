@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -108,6 +109,20 @@ class CaffeineReplayCacheTest {
 
         nanos.set(Duration.ofSeconds(246).toNanos());
         assertThat(cache.checkAndStore("jti-1", TTL)).isFalse();
+    }
+
+    @Test
+    void zeroMaxEntriesRejected() {
+        assertThatIllegalArgumentException()
+            .isThrownBy(() -> CaffeineReplayCache.create(0))
+            .withMessageContaining("maxEntries must be positive");
+    }
+
+    @Test
+    void negativeMaxEntriesRejected() {
+        assertThatIllegalArgumentException()
+            .isThrownBy(() -> CaffeineReplayCache.create(-1))
+            .withMessageContaining("maxEntries must be positive");
     }
 
     @Test

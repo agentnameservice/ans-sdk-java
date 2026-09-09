@@ -38,6 +38,9 @@ public final class CaffeineReplayCache implements ReplayCache {
     }
 
     static CaffeineReplayCache create(int maxEntries, Ticker ticker) {
+        if (maxEntries <= 0) {
+            throw new IllegalArgumentException("maxEntries must be positive: " + maxEntries);
+        }
         Objects.requireNonNull(ticker, "ticker");
         Cache<String, Duration> cache = Caffeine.newBuilder()
             .expireAfter(Expiry.creating((String key, Duration ttl) -> ttl))

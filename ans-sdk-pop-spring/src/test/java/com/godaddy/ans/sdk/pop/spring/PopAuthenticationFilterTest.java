@@ -23,6 +23,7 @@ import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -376,6 +377,14 @@ class PopAuthenticationFilterTest {
             .builder("issuer.example.com", ROOT_KEYS, REPLAY)
             .withTrustedHosts("  ", ""))
             .withMessageContaining("every supplied host was empty");
+    }
+
+    @Test
+    void builderRejectsWhenNeitherExternalUrlNorTrustedHostsSet() {
+        assertThatIllegalStateException().isThrownBy(() -> PopAuthenticationFilter
+            .builder("issuer.example.com", ROOT_KEYS, REPLAY)
+            .build())
+            .withMessageContaining("Host header");
     }
 
     @Test

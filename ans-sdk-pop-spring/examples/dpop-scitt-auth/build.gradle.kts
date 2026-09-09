@@ -5,6 +5,7 @@ plugins {
 
 dependencies {
     implementation(project(":ans-sdk-pop-spring"))
+    implementation(project(":ans-sdk-transparency"))
     implementation("org.springframework.boot:spring-boot-starter-web")
 }
 

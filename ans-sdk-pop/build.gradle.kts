@@ -8,16 +8,11 @@ val mockitoVersion: String by project
 val assertjVersion: String by project
 
 dependencies {
-    // Core, crypto, generated models
-    api(project(":ans-sdk-core"))
-    api(project(":ans-sdk-crypto"))
-    api(project(":ans-sdk-api"))
+    // Crypto for CertificateUtils, internal to CallerVerifier
+    implementation(project(":ans-sdk-crypto"))
 
-    // Transparency for StatusToken/ScittReceipt/RootKeyManager/DefaultScittVerifier reuse
-    api(project(":ans-sdk-transparency"))
-
-    // Agent-client for verification/trust surface reuse
-    api(project(":ans-sdk-agent-client"))
+    // Transparency for StatusToken/ScittReceipt/DefaultScittVerifier reuse, consumed internally
+    implementation(project(":ans-sdk-transparency"))
 
     // Nimbus JOSE + JWT for ES256 DPoP proof sign/verify
     implementation("com.nimbusds:nimbus-jose-jwt:$nimbusJoseVersion")

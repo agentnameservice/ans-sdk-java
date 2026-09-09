@@ -8,6 +8,7 @@ val springBootVersion = "4.1.0"
 dependencies {
     // POP protocol (transitively exposes core/crypto/api/transparency types)
     api(project(":ans-sdk-pop"))
+    implementation(project(":ans-sdk-transparency"))
 
     // Spring Boot BOM aligns spring-web / servlet-api versions
     compileOnly(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))

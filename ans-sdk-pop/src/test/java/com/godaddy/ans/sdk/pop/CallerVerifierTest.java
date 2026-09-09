@@ -272,6 +272,38 @@ class CallerVerifierTest {
     }
 
     @Test
+    void revokedAgentMapsToStatusInvalid() {
+        CallerVerifier verifier = new CallerVerifier(new FakeScitt(ScittExpectation.revoked(ANS_NAME)), DEFAULT_SKEW);
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.STATUS_INVALID);
+    }
+
+    @Test
+    void inactiveAgentMapsToStatusInvalid() {
+        CallerVerifier verifier = new CallerVerifier(
+            new FakeScitt(ScittExpectation.inactive(StatusToken.Status.DEPRECATED, ANS_NAME)), DEFAULT_SKEW);
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.STATUS_INVALID);
+    }
+
+    @Test
+    void keyNotFoundMapsToStatusInvalid() {
+        CallerVerifier verifier = new CallerVerifier(
+            new FakeScitt(ScittExpectation.keyNotFound("no key")), DEFAULT_SKEW);
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.STATUS_INVALID);
+    }
+
+    @Test
     void missingHeadersRejected() {
         PopException ex = catchThrowableOfType(() -> verifier().verifyCaller(
             proofJws, Map.of(), METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()),
@@ -361,6 +393,17 @@ class CallerVerifierTest {
             PopException.class);
 
         assertThat(ex.category()).isEqualTo(ErrorType.CONTENT_BINDING_MISMATCH);
+    }
+
+    @Test
+    void receiptNullPayloadRejected() {
+        ScittReceipt nullPayloadReceipt = new ScittReceipt(null, null, null, null, null);
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, nullPayloadReceipt, token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+        assertThat(ex.getMessage()).contains("receipt has no event payload");
     }
 
     @Test

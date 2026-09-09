@@ -299,7 +299,9 @@ public final class CallerVerifier {
         ErrorType type = switch (expectation.status()) {
             case INVALID_RECEIPT -> ErrorType.RECEIPT_INVALID;
             case INVALID_TOKEN, TOKEN_EXPIRED, AGENT_REVOKED, AGENT_INACTIVE, KEY_NOT_FOUND -> ErrorType.STATUS_INVALID;
-            case PARSE_ERROR, NOT_PRESENT, VERIFIED -> ErrorType.SCITT_HEADER_INVALID;
+            case PARSE_ERROR, NOT_PRESENT -> ErrorType.SCITT_HEADER_INVALID;
+            // Unreachable: mapExpectation runs only when !expectation.isVerified().
+            case VERIFIED -> throw new IllegalStateException("mapExpectation called on a verified expectation");
         };
         return new PopException(type, expectation.failureReason());
     }

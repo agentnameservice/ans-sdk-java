@@ -19,8 +19,11 @@ import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.Security;
@@ -321,6 +324,53 @@ class ProofTest {
     }
 
     @Test
+    void contentDigestKnownVectors() {
+        byte[] body = "{\"task\":\"reconcile-ledger\",\"amount\":\"1000.00\"}".getBytes(StandardCharsets.UTF_8);
+
+        assertThat(Proof.contentDigest(new byte[0])).isEqualTo("47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU");
+        assertThat(Proof.contentDigest(body)).isEqualTo("wT8MhptL9zBd-WXZkYTjY7AHo1vNNfPYZzVifJEzPJc");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "\"kid\":\"k1\"",
+        "\"use\":\"sig\",\"alg\":\"ES256\"",
+        "\"key_ops\":[\"verify\"]",
+        "\"x5u\":\"https://keys.example.com/agent.jwk\"",
+        "\"foo\":1"
+    })
+    void acceptRejectsJwkWithExtraMembers(String extraMember) {
+        String bareJwk = "\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"" + jwkA.getX() + "\",\"y\":\"" + jwkA.getY() + "\"";
+        String headerJson = "{\"typ\":\"dpop+jwt\",\"alg\":\"ES256\",\"jwk\":{" + bareJwk + "," + extraMember
+            + "},\"x5c\":[\"" + x5cA.toString() + "\"]}";
+        String compact = Base64URL.encode(headerJson) + "." + Base64URL.encode("{}")
+            + "." + Base64URL.encode(new byte[]{1, 2, 3});
+
+        PopException ex = catchThrowableOfType(() -> Proof.acceptES256DPoP(compact), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.MALFORMED_PROOF);
+        assertThat(ex.getMessage()).contains("exactly kty, crv, x, y");
+    }
+
+    @Test
+    void acceptRejectsJwkWithShortCoordinate() throws Exception {
+        KeyPair shortX = keyPairWithLeadingZeroX();
+        ECKey full = publicEcJwk(shortX, Curve.P_256);
+        byte[] x = full.getX().decode();
+        String shortXEncoded = Base64URL.encode(Arrays.copyOfRange(x, 1, x.length)).toString();
+        String headerJson = "{\"typ\":\"dpop+jwt\",\"alg\":\"ES256\",\"jwk\":{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\""
+            + shortXEncoded + "\",\"y\":\"" + full.getY() + "\"},\"x5c\":[\""
+            + Base64.encode(selfSigned(shortX, "SHA256withECDSA").getEncoded()) + "\"]}";
+        String compact = Base64URL.encode(headerJson) + "." + Base64URL.encode("{}")
+            + "." + Base64URL.encode(new byte[]{1, 2, 3});
+
+        PopException ex = catchThrowableOfType(() -> Proof.acceptES256DPoP(compact), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.MALFORMED_PROOF);
+        assertThat(ex.getMessage()).contains("full-width");
+    }
+
+    @Test
     void parseClaimsRoundTrips() throws Exception {
         Payload payload = new Payload(Map.of(
             "htm", "POST",
@@ -418,6 +468,20 @@ class ProofTest {
 
     private static ECKey publicEcJwk(KeyPair pair, Curve curve) {
         return new ECKey.Builder(curve, (ECPublicKey) pair.getPublic()).build().toPublicJWK();
+    }
+
+    // Roughly one P-256 key in 256 has an x coordinate whose full-width encoding
+    // starts with a zero byte, which is the only way to build an on-curve jwk with
+    // a 31-byte coordinate.
+    private static KeyPair keyPairWithLeadingZeroX() throws Exception {
+        for (int attempt = 0; attempt < 10_000; attempt++) {
+            KeyPair pair = ec("secp256r1");
+            byte[] x = publicEcJwk(pair, Curve.P_256).getX().decode();
+            if (x.length == 32 && x[0] == 0) {
+                return pair;
+            }
+        }
+        throw new AssertionError("no P-256 key with a leading-zero x coordinate found");
     }
 
     private static ECPublicKey fixedCoordinateKey(BigInteger x, BigInteger y) {

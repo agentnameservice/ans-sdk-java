@@ -12,39 +12,42 @@ class VerifyOptionsTest {
         VerifyOptions options = VerifyOptions.none();
 
         assertThat(options.accessToken()).isNull();
-        assertThat(options.contentSha256()).isNull();
-        assertThat(options.requireContentBinding()).isFalse();
+        assertThat(options.receivedContent()).isNull();
     }
 
     @Test
-    void withContentSha256CopiesArray() {
-        byte[] hash = new byte[32];
-        hash[0] = 1;
-        VerifyOptions options = VerifyOptions.none().withContentSha256(hash);
-
-        hash[0] = 2;
-
-        assertThat(options.contentSha256()[0]).isEqualTo((byte) 1);
-    }
-
-    @Test
-    void withContentSha256PreservesAccessToken() {
-        VerifyOptions options = VerifyOptions.withAccessToken("token").withContentSha256(new byte[32]);
+    void withAccessTokenSetsTokenOnly() {
+        VerifyOptions options = VerifyOptions.withAccessToken("token");
 
         assertThat(options.accessToken()).isEqualTo("token");
-        assertThat(options.contentSha256()).hasSize(32);
+        assertThat(options.receivedContent()).isNull();
     }
 
     @Test
-    void withRequiredContentBindingSetsFlag() {
-        VerifyOptions options = VerifyOptions.none().withContentSha256(new byte[32]).withRequiredContentBinding();
+    void withReceivedContentSetsSource() throws Exception {
+        byte[] body = {1, 2, 3};
+        ContentSource source = () -> body;
+        VerifyOptions options = VerifyOptions.none().withReceivedContent(source);
 
-        assertThat(options.requireContentBinding()).isTrue();
-        assertThat(options.contentSha256()).hasSize(32);
+        assertThat(options.receivedContent()).isSameAs(source);
+        assertThat(options.receivedContent().read()).isEqualTo(body);
     }
 
     @Test
-    void withContentSha256RejectsNull() {
-        assertThatNullPointerException().isThrownBy(() -> VerifyOptions.none().withContentSha256(null));
+    void withReceivedContentPreservesAccessToken() {
+        VerifyOptions options = VerifyOptions.withAccessToken("token").withReceivedContent(() -> new byte[0]);
+
+        assertThat(options.accessToken()).isEqualTo("token");
+        assertThat(options.receivedContent()).isNotNull();
+    }
+
+    @Test
+    void withReceivedContentRejectsNull() {
+        assertThatNullPointerException().isThrownBy(() -> VerifyOptions.none().withReceivedContent(null));
+    }
+
+    @Test
+    void withAccessTokenRejectsNull() {
+        assertThatNullPointerException().isThrownBy(() -> VerifyOptions.withAccessToken(null));
     }
 }

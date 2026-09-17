@@ -66,26 +66,34 @@ public final class PopSigner {
         return new PopSigner(key, certDER.clone(), publicJwk);
     }
 
+    /**
+     * Signs a proof for a request without content. Every proof binds the request
+     * content through ans_content_digest (ANS-6 §7.13); this overload carries
+     * the digest of the empty octet string.
+     */
     public String sign(String method, String url) throws PopException {
-        return signInternal(method, url, null, null);
+        return signInternal(method, url, null, Proof.EMPTY_CONTENT);
     }
 
     /**
-     * Signs a proof and binds an OAuth2 access token via ath =
-     * base64url(SHA-256(token)) per RFC 9449 §4.2. Use this when the request
-     * presents the token as {@code Authorization: DPoP <token>} (RFC 9449 §7.1).
-     * A verifier enforces ath vs presented token in both directions.
+     * Signs a proof for a request without content and binds an OAuth2 access
+     * token via ath = base64url(SHA-256(token)) per RFC 9449 §4.2. Use this when
+     * the request presents the token as {@code Authorization: DPoP <token>}
+     * (RFC 9449 §7.1). A verifier enforces ath vs presented token in both
+     * directions.
      */
     public String sign(String method, String url, String accessToken) throws PopException {
         Objects.requireNonNull(accessToken, "accessToken");
-        return signInternal(method, url, accessToken, null);
+        return signInternal(method, url, accessToken, Proof.EMPTY_CONTENT);
     }
 
     /**
-     * Signs a proof and binds the request body via ans_content_digest =
-     * base64url(SHA-256(content)) per ANS-6 §7.13. An empty body carries no
-     * digest claim, so a verifier that does not require content binding still
-     * accepts it. A verifier enforces the digest vs the body in both directions.
+     * Signs a proof binding the request content via ans_content_digest =
+     * base64url(SHA-256(content)) per ANS-6 §7.13. {@code content} must be the
+     * octets the request transmits: after transfer coding, with any content
+     * coding still applied (RFC 9110 §6.4). An empty array binds the empty octet
+     * string. A verifier rejects a mismatch, so a hop that rewrites the content
+     * invalidates the proof.
      */
     public String sign(String method, String url, byte[] content) throws PopException {
         Objects.requireNonNull(content, "content");
@@ -94,8 +102,7 @@ public final class PopSigner {
 
     /**
      * Signs a proof binding both an OAuth2 access token (ath, RFC 9449 §4.2) and
-     * the request body (ans_content_digest, ANS-6 §7.13). An empty body carries
-     * no digest claim.
+     * the request content (ans_content_digest, ANS-6 §7.13).
      */
     public String sign(String method, String url, String accessToken, byte[] content) throws PopException {
         Objects.requireNonNull(accessToken, "accessToken");
@@ -134,9 +141,7 @@ public final class PopSigner {
         if (accessToken != null) {
             claims.put("ath", Proof.accessTokenHash(accessToken));
         }
-        if (content != null && content.length > 0) {
-            claims.put("ans_content_digest", Proof.contentDigest(content));
-        }
+        claims.put("ans_content_digest", Proof.contentDigest(content));
 
         return Jws.sign(header, new Payload(claims), privateKey);
     }

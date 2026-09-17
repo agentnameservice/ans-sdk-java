@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigInteger;
 import java.net.URI;
 import java.net.http.HttpRequest;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.Security;
@@ -23,13 +24,17 @@ import java.security.cert.X509Certificate;
 import java.security.interfaces.ECPrivateKey;
 import java.security.spec.ECGenParameterSpec;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 class PopHttpTest {
+
+    private static final String EMPTY_CONTENT_DIGEST = "47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU";
 
     private static PopSigner signer;
 
@@ -107,6 +112,102 @@ class PopHttpTest {
         PopHttp.attachIdentity(builder, signer, Map.of(), null);
 
         assertThat(decodeProof(builder).ath()).isNull();
+    }
+
+    @Test
+    void attachIdentityWithoutContentCarriesEmptyContentDigest() throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+            .uri(URI.create("https://api.example.com/x"))
+            .GET();
+
+        PopHttp.attachIdentity(builder, signer, Map.of(), null);
+
+        assertThat(decodeProof(builder).ansContentDigest()).isEqualTo(EMPTY_CONTENT_DIGEST);
+    }
+
+    @Test
+    void attachIdentityWithContentBindsDigestAndSetsBody() throws Exception {
+        byte[] body = "{\"task\":\"reconcile-ledger\",\"amount\":\"1000.00\"}".getBytes(StandardCharsets.UTF_8);
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+            .uri(URI.create("https://api.example.com/x"))
+            .POST(HttpRequest.BodyPublishers.noBody());
+
+        PopHttp.attachIdentity(builder, signer, Map.of(), null, body);
+
+        HttpRequest request = builder.build();
+        assertThat(decodeProof(builder).ansContentDigest()).isEqualTo("wT8MhptL9zBd-WXZkYTjY7AHo1vNNfPYZzVifJEzPJc");
+        assertThat(request.method()).isEqualTo("POST");
+        assertThat(request.bodyPublisher()).map(HttpRequest.BodyPublisher::contentLength).contains((long) body.length);
+    }
+
+    @Test
+    void attachIdentityWithContentAndTokenBindsBoth() throws Exception {
+        String token = "Kz~8mXK1EalYznwH-LC-1fBAo.4Ljp~zsPE_NeO.gxU";
+        byte[] body = "payload".getBytes(StandardCharsets.UTF_8);
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+            .uri(URI.create("https://api.example.com/x"))
+            .PUT(HttpRequest.BodyPublishers.noBody());
+
+        PopHttp.attachIdentity(builder, signer, Map.of(), token, body);
+
+        Proof.Claims claims = decodeProof(builder);
+        assertThat(claims.ath()).isEqualTo(Proof.accessTokenHash(token));
+        assertThat(claims.ansContentDigest()).isEqualTo(Proof.contentDigest(body));
+        assertThat(claims.htm()).isEqualTo("PUT");
+    }
+
+    @Test
+    void attachIdentityRejectsRequestContentTheProofWouldNotBind() {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+            .uri(URI.create("https://api.example.com/x"))
+            .POST(HttpRequest.BodyPublishers.ofString("payload"));
+
+        PopException ex = catchThrowableOfType(
+            () -> PopHttp.attachIdentity(builder, signer, Map.of(), null), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.MISCONFIGURED);
+    }
+
+    @Test
+    void attachIdentityReplacesExistingScittHeaders() throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+            .uri(URI.create("https://api.example.com/x"))
+            .header(ScittHeaders.SCITT_RECEIPT_HEADER, "stale")
+            .header(PopHttp.DPOP_HEADER, "stale-proof")
+            .GET();
+
+        PopHttp.attachIdentity(builder, signer, Map.of(ScittHeaders.SCITT_RECEIPT_HEADER, List.of("fresh")), null);
+
+        HttpRequest request = builder.build();
+        assertThat(request.headers().allValues(ScittHeaders.SCITT_RECEIPT_HEADER)).containsExactly("fresh");
+        assertThat(request.headers().allValues(PopHttp.DPOP_HEADER)).hasSize(1).doesNotContain("stale-proof");
+    }
+
+    @Test
+    void attachIdentityRejectsMultiValuedScittHeader() {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+            .uri(URI.create("https://api.example.com/x"))
+            .GET();
+        Map<String, List<String>> scitt = Map.of(ScittHeaders.SCITT_RECEIPT_HEADER, List.of("a", "b"));
+
+        PopException ex = catchThrowableOfType(
+            () -> PopHttp.attachIdentity(builder, signer, scitt, null), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.MISCONFIGURED);
+    }
+
+    @Test
+    void attachIdentityRejectsScittHeaderWithoutValues() {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+            .uri(URI.create("https://api.example.com/x"))
+            .GET();
+        Map<String, List<String>> scitt = new HashMap<>();
+        scitt.put(ScittHeaders.STATUS_TOKEN_HEADER, null);
+
+        PopException ex = catchThrowableOfType(
+            () -> PopHttp.attachIdentity(builder, signer, scitt, null), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.MISCONFIGURED);
     }
 
     @Test

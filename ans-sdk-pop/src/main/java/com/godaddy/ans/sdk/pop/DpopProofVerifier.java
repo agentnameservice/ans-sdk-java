@@ -3,6 +3,7 @@ package com.godaddy.ans.sdk.pop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -37,14 +38,13 @@ public final class DpopProofVerifier {
      * cache (no boundary gap). Cache retention = iat + skew + grace.
      */
     static final Duration REPLAY_GRACE = Duration.ofSeconds(5);
-    // A pre-hashed request-body digest must be a full SHA-256 (ANS-6 §7.13).
     private static final int SHA256_BYTES = 32;
     // The only ans_profile revision this verifier implements (ANS-6 §7.12).
     private static final long ANS_PROFILE_REVISION = 1;
 
     private static final Logger LOG = LoggerFactory.getLogger(DpopProofVerifier.class);
 
-    record Verified(ProofResult result, String replayKey, Duration replayTtl) {
+    record Verified(ProofResult result, byte[] contentDigest, String replayKey, Duration replayTtl) {
     }
 
     /**
@@ -53,10 +53,12 @@ public final class DpopProofVerifier {
      * {@code replay}.
      *
      * <p>Order: size cap, pinned typ/alg plus required jwk/x5c, x5c P-256 leaf,
-     * jwk↔x5c key equality, signature under that single key, htm, normalized
-     * htu, ath vs presented token, iat window, then jti single-use. Replay is
-     * recorded LAST, so only proofs that pass every other check consume a cache
-     * slot.
+     * jwk↔x5c key equality, signature under that single key, required
+     * ans_content_digest shape, htm, normalized htu, ath vs presented token, iat
+     * window, jti bounds, then the received content against ans_content_digest
+     * and finally the jti single-use commit. Content is read and replay is
+     * recorded LAST, so only proofs that pass every other check consume work or
+     * a cache slot.
      *
      * <p>A proof verified here is cryptographically well-formed but NOT yet
      * trusted: nothing has established that its certificate belongs to a live
@@ -71,25 +73,28 @@ public final class DpopProofVerifier {
             LOG.error("DPoP proof rejected: replay cache is not configured");
             throw new PopException(ErrorType.MISCONFIGURED, "replay cache must not be null");
         }
+        VerifyOptions effectiveOptions = options != null ? options : VerifyOptions.none();
         try {
-            Verified verified = verifyUnrecorded(proofJWS, method, url, now, skew, options);
+            Verified verified = verifyUnrecorded(proofJWS, method, url, now, skew, effectiveOptions);
+            verifyContent(verified, effectiveOptions.receivedContent());
             recordReplay(verified, replay);
             LOG.debug("DPoP proof accepted: jti={} htu={}", verified.result().jti(), verified.result().htu());
             return verified.result();
         } catch (PopException e) {
-            if (e.category() == ErrorType.MISCONFIGURED) {
-                LOG.error("DPoP proof rejected: {} - {}", e.category(), e.getMessage());
-            } else {
-                LOG.info("DPoP proof rejected: {} - {}", e.category(), e.getMessage());
+            switch (e.category()) {
+                case MISCONFIGURED, REPLAY_CACHE_FULL -> LOG.error("DPoP proof rejected: {} - {}", e.category(),
+                    e.getMessage());
+                default -> LOG.info("DPoP proof rejected: {} - {}", e.category(), e.getMessage());
             }
             throw e;
         }
     }
 
     /**
-     * Runs every proof check except the replay commit, so a caller that has more
-     * trust checks to perform can defer consuming a cache slot until the proof is
-     * known to belong to a vouched agent.
+     * Runs every proof check except the content comparison and the replay
+     * commit, so a caller that has more trust checks to perform can defer reading
+     * content and consuming a cache slot until the proof is known to belong to a
+     * vouched agent.
      */
     Verified verifyUnrecorded(String proofJWS, String method, String url, Instant now,
                               Duration skew, VerifyOptions options) throws PopException {
@@ -123,6 +128,8 @@ public final class DpopProofVerifier {
 
         verifyProfileRevision(claims.ansProfile());
 
+        byte[] contentDigest = decodeContentDigest(claims.ansContentDigest());
+
         if (!method.equals(claims.htm())) {
             throw new PopException(ErrorType.HTTP_BINDING_MISMATCH, "htm does not match request method");
         }
@@ -133,9 +140,6 @@ public final class DpopProofVerifier {
         }
 
         verifyAth(claims.ath(), effectiveOptions.accessToken());
-
-        verifyContentBinding(claims.ansContentDigest(), effectiveOptions.contentSha256(),
-            effectiveOptions.requireContentBinding());
 
         Instant iat = claims.iat();
         if (iat == null) {
@@ -171,7 +175,31 @@ public final class DpopProofVerifier {
             normalizedHtu,
             iat);
 
-        return new Verified(result, replayKey, replayTtl);
+        return new Verified(result, contentDigest, replayKey, replayTtl);
+    }
+
+    /**
+     * Compares the received request content with the proof's ans_content_digest
+     * (ANS-6 §7.4 step 12). An absent source means the request carried no
+     * content, which binds the empty octet string. Call this only once the proof
+     * is otherwise trusted: reading content is the one step whose cost the
+     * caller controls, and the spec defers it until after the identity binding.
+     */
+    void verifyContent(Verified verified, ContentSource content) throws PopException {
+        Objects.requireNonNull(verified, "verified");
+        byte[] received;
+        try {
+            received = content != null ? content.read() : Proof.EMPTY_CONTENT;
+        } catch (IOException e) {
+            throw new PopException(ErrorType.CONTENT_UNREADABLE, "request content could not be read", e);
+        }
+        if (received == null) {
+            throw new PopException(ErrorType.MISCONFIGURED, "content source returned null");
+        }
+        if (!MessageDigest.isEqual(sha256(received), verified.contentDigest())) {
+            throw new PopException(ErrorType.CONTENT_BINDING_MISMATCH,
+                "ans_content_digest does not match request content");
+        }
     }
 
     /**
@@ -207,6 +235,28 @@ public final class DpopProofVerifier {
     }
 
     /**
+     * Decodes the required ans_content_digest claim (ANS-6 §7.2, §7.4 step 2): the
+     * unpadded base64url of a SHA-256 digest. Its value is compared against the
+     * received content only at step 12, in {@link #verifyContent}.
+     */
+    private static byte[] decodeContentDigest(String claim) throws PopException {
+        if (claim == null) {
+            throw new PopException(ErrorType.MALFORMED_PROOF, "ans_content_digest claim is missing");
+        }
+        byte[] digest;
+        try {
+            digest = Base64Url.decode(claim);
+        } catch (IllegalArgumentException e) {
+            throw new PopException(ErrorType.MALFORMED_PROOF, "ans_content_digest is not base64url", e);
+        }
+        if (digest.length != SHA256_BYTES || claim.indexOf('=') >= 0) {
+            throw new PopException(ErrorType.MALFORMED_PROOF,
+                "ans_content_digest must be an unpadded base64url SHA-256 digest");
+        }
+        return digest;
+    }
+
+    /**
      * Enforces ath vs presented access token, strictly in both directions: a
      * proof minted for a token-bound context is not accepted without its token,
      * and a presented token demands a matching ath (RFC 9449 §4.3).
@@ -226,47 +276,6 @@ public final class DpopProofVerifier {
                 expected.getBytes(StandardCharsets.UTF_8),
                 proofAth.getBytes(StandardCharsets.UTF_8))) {
             throw new PopException(ErrorType.TOKEN_BINDING_MISMATCH, "ath does not match presented access token");
-        }
-    }
-
-    /**
-     * Enforces ans_content_digest vs the request body (ANS-6 §7.13), mirroring
-     * ath. A proof carrying a digest is never accepted without a body hash to
-     * check it against; a supplied body hash demands a matching digest only when
-     * {@code requireBinding} is set, so an endpoint that does not require content
-     * binding still accepts a proof that omits the digest. A wrong-length body
-     * hash is a wiring error (MISCONFIGURED), not a mismatch.
-     */
-    private static void verifyContentBinding(String proofDigest, byte[] contentSha256, boolean requireBinding)
-            throws PopException {
-        boolean bodyPresented = contentSha256 != null;
-        boolean digestPresent = proofDigest != null;
-
-        if (bodyPresented && contentSha256.length != SHA256_BYTES) {
-            throw new PopException(ErrorType.MISCONFIGURED, "contentSha256 must be exactly 32 bytes");
-        }
-        if (!bodyPresented) {
-            if (digestPresent) {
-                throw new PopException(ErrorType.CONTENT_BINDING_MISMATCH,
-                    "proof binds request content but no body hash was supplied");
-            }
-            return;
-        }
-        if (!digestPresent) {
-            if (requireBinding) {
-                throw new PopException(ErrorType.CONTENT_BINDING_MISMATCH,
-                    "content binding required but proof carries no ans_content_digest");
-            }
-            return;
-        }
-        // The body hash arrives pre-hashed, so the expected digest is a straight
-        // base64url encoding — Proof.contentDigest would hash it a second time.
-        String expected = Base64Url.encode(contentSha256);
-        if (!MessageDigest.isEqual(
-                expected.getBytes(StandardCharsets.UTF_8),
-                proofDigest.getBytes(StandardCharsets.UTF_8))) {
-            throw new PopException(ErrorType.CONTENT_BINDING_MISMATCH,
-                "ans_content_digest does not match request body");
         }
     }
 

@@ -8,6 +8,8 @@ import com.nimbusds.jose.jwk.Curve;
 import com.nimbusds.jose.jwk.ECKey;
 import com.nimbusds.jose.jwk.JWK;
 import com.nimbusds.jose.util.Base64;
+import com.nimbusds.jose.util.Base64URL;
+import com.nimbusds.jose.util.JSONObjectUtils;
 
 import java.io.ByteArrayInputStream;
 import java.math.BigInteger;
@@ -21,15 +23,24 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.ECPublicKey;
 import java.security.spec.ECPoint;
+import java.text.ParseException;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 final class Proof {
 
     static final int P256_FIELD_BYTES = 32;
+
+    // The content a request without a body binds (ANS-6 §7.13).
+    static final byte[] EMPTY_CONTENT = new byte[0];
+
+    // ANS-6 §7.2: the jwk is exactly the bare public key. Any other member — a
+    // library-added kid, alg or use, or a private d — fails closed.
+    private static final Set<String> BARE_JWK_MEMBERS = Set.of("kty", "crv", "x", "y");
 
     private Proof() {
     }
@@ -47,11 +58,12 @@ final class Proof {
     // Claims holds the DPoP claims this profile binds: the HTTP method and
     // normalized target URI (htm/htu), the issued-at (iat), a unique id (jti)
     // for replay detection, the access-token hash (ath) present only when the
-    // request also presents an OAuth2 access token, the request-body hash
-    // (ans_content_digest) present only when the caller binds the body (ANS-6
-    // §7.13), and the profile revision (ans_profile) that selects the rule set
-    // (ANS-6 §7.12). Additional claims are tolerated on the payload (DPoP
-    // permits them). Only the header is strictly decoded.
+    // request also presents an OAuth2 access token, the request-content hash
+    // (ans_content_digest) carried by every proof (ANS-6 §7.13; a request
+    // without content binds the empty octet string), and the profile revision
+    // (ans_profile) that selects the rule set (ANS-6 §7.12). Additional claims
+    // are tolerated on the payload (DPoP permits them). Only the header is
+    // strictly decoded.
     record Claims(String htm, String htu, Instant iat, String jti, String ath, String ansContentDigest,
                   Long ansProfile) {
     }
@@ -183,6 +195,12 @@ final class Proof {
     }
 
     private static ECKey extractPublicEcKey(JWSHeader header) throws PopException {
+        // Nimbus drops members it does not know, so the closed member set is
+        // checked on the header bytes as sent, not on the parsed key.
+        if (!(rawHeaderMember(header, "jwk") instanceof Map<?, ?> members)
+                || !BARE_JWK_MEMBERS.equals(members.keySet())) {
+            throw new PopException(ErrorType.MALFORMED_PROOF, "jwk must contain exactly kty, crv, x, y");
+        }
         JWK jwk = header.getJWK();
         if (!(jwk instanceof ECKey ecKey)) {
             throw new PopException(ErrorType.MALFORMED_PROOF, "jwk must be an EC key");
@@ -193,7 +211,19 @@ final class Proof {
         if (ecKey.isPrivate()) {
             throw new PopException(ErrorType.MALFORMED_PROOF, "jwk must not contain a private key");
         }
+        if (ecKey.getX().decode().length != P256_FIELD_BYTES || ecKey.getY().decode().length != P256_FIELD_BYTES) {
+            throw new PopException(ErrorType.MALFORMED_PROOF, "jwk coordinates must be full-width (32 bytes)");
+        }
         return ecKey;
+    }
+
+    private static Object rawHeaderMember(JWSHeader header, String name) throws PopException {
+        Base64URL encoded = header.getParsedBase64URL();
+        try {
+            return JSONObjectUtils.parse(encoded.decodeToString()).get(name);
+        } catch (ParseException e) {
+            throw new PopException(ErrorType.MALFORMED_PROOF, "proof header is not a JSON object", e);
+        }
     }
 
     // extractLeafCertificate decodes and validates the x5c leaf — the caller's

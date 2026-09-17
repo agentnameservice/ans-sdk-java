@@ -39,17 +39,21 @@ public final class CallerVerifier {
     private final DpopProofVerifier proofVerifier = new DpopProofVerifier();
     private final ScittVerifier scittVerifier;
     private final Duration popSkew;
+    private final RootKeyRefresher keyRefresher;
 
     private CallerVerifier(String expectedIssuer, Duration scittClockSkew, Duration popSkew) {
-        Objects.requireNonNull(expectedIssuer, "expectedIssuer");
-        this.scittVerifier = new DefaultScittVerifier(
-            Objects.requireNonNull(scittClockSkew, "scittClockSkew"), expectedIssuer);
-        this.popSkew = Objects.requireNonNull(popSkew, "popSkew");
+        this(new DefaultScittVerifier(Objects.requireNonNull(scittClockSkew, "scittClockSkew"),
+            Objects.requireNonNull(expectedIssuer, "expectedIssuer")), popSkew, null);
     }
 
     CallerVerifier(ScittVerifier scittVerifier, Duration popSkew) {
+        this(scittVerifier, popSkew, null);
+    }
+
+    private CallerVerifier(ScittVerifier scittVerifier, Duration popSkew, RootKeyRefresher keyRefresher) {
         this.scittVerifier = Objects.requireNonNull(scittVerifier, "scittVerifier");
         this.popSkew = Objects.requireNonNull(popSkew, "popSkew");
+        this.keyRefresher = keyRefresher;
     }
 
     public static CallerVerifier create(String expectedIssuer) {
@@ -58,6 +62,16 @@ public final class CallerVerifier {
 
     public static CallerVerifier create(String expectedIssuer, Duration scittClockSkew, Duration popSkew) {
         return new CallerVerifier(expectedIssuer, scittClockSkew, popSkew);
+    }
+
+    /**
+     * Returns a verifier that, when a receipt or status token names a signing key
+     * it does not hold, asks {@code refresher} for fresh root keys and retries
+     * verification once (ANS-6 §4.5, §9.5). Without a refresher an unknown key is
+     * rejected as {@link ErrorType#UNKNOWN_SIGNING_KEY}.
+     */
+    public CallerVerifier withRootKeyRefresher(RootKeyRefresher refresher) {
+        return new CallerVerifier(scittVerifier, popSkew, Objects.requireNonNull(refresher, "refresher"));
     }
 
     public CallerIdentity verifyCaller(String proofJWS, Map<String, List<String>> headers, String method,
@@ -96,7 +110,7 @@ public final class CallerVerifier {
 
             // Liveness and identity: the status token proves the certificate is
             // currently valid, and the receipt anchors it in the transparency log.
-            ScittExpectation expectation = scittVerifier.verify(receipt, token, rootKeys);
+            ScittExpectation expectation = verifyScitt(receipt, token, rootKeys);
             if (!expectation.isVerified()) {
                 throw mapExpectation(expectation);
             }
@@ -109,6 +123,11 @@ public final class CallerVerifier {
                 throw new PopException(ErrorType.EXPECTED_PEER_MISMATCH,
                     "status token peer does not match expected peer");
             }
+
+            // Content is read and hashed only now that the proof is bound to a
+            // live agent (ANS-6 §7.4 step 12), so unauthenticated callers cannot
+            // make the callee buffer and hash arbitrary bodies.
+            proofVerifier.verifyContent(verified, effectiveOptions.receivedContent());
 
             // Single-use: recorded last, once the proof is known to belong to an
             // agent the transparency log vouches for. Recording earlier would let
@@ -127,10 +146,11 @@ public final class CallerVerifier {
     }
 
     private static void logRejection(PopException e) {
-        if (e.category() == ErrorType.MISCONFIGURED) {
-            LOG.error("caller rejected: {} - {}", e.category(), e.getMessage());
-        } else {
-            LOG.info("caller rejected: {} - {}", e.category(), e.getMessage());
+        switch (e.category()) {
+            case MISCONFIGURED, REPLAY_CACHE_FULL -> LOG.error("caller rejected: {} - {}", e.category(),
+                e.getMessage());
+            case UNKNOWN_SIGNING_KEY -> LOG.warn("caller rejected: {} - {}", e.category(), e.getMessage());
+            default -> LOG.info("caller rejected: {} - {}", e.category(), e.getMessage());
         }
     }
 
@@ -139,14 +159,40 @@ public final class CallerVerifier {
         VerifyOptions verifyOptions = options.accessToken() != null
             ? VerifyOptions.withAccessToken(options.accessToken())
             : VerifyOptions.none();
-        if (options.contentSha256() != null) {
-            verifyOptions = verifyOptions.withContentSha256(options.contentSha256());
-        }
-        if (options.requireContentBinding()) {
-            verifyOptions = verifyOptions.withRequiredContentBinding();
-        }
         Instant now = options.clock() != null ? options.clock() : Instant.now();
         return proofVerifier.verifyUnrecorded(proofJWS, method, url, now, popSkew, verifyOptions);
+    }
+
+    // An unknown signing key is usually a stale root-key cache after the log added
+    // a key, so refresh once, cooldown-gated by the refresher, and retry before
+    // rejecting (ANS-6 §4.5, §9.5). A failing refresher keeps the rejection.
+    private ScittExpectation verifyScitt(ScittReceipt receipt, StatusToken token, Map<String, PublicKey> rootKeys) {
+        ScittExpectation expectation = scittVerifier.verify(receipt, token, rootKeys);
+        if (!expectation.isKeyNotFound() || keyRefresher == null) {
+            return expectation;
+        }
+        Instant issuedAt = artifactIssuedAt(receipt, token);
+        if (issuedAt == null) {
+            return expectation;
+        }
+        Optional<Map<String, PublicKey>> refreshed;
+        try {
+            refreshed = keyRefresher.refresh(issuedAt);
+        } catch (RuntimeException e) {
+            LOG.warn("root key refresh failed; keeping rejection: {}", e.getMessage());
+            return expectation;
+        }
+        return refreshed.map(keys -> scittVerifier.verify(receipt, token, keys)).orElse(expectation);
+    }
+
+    private static Instant artifactIssuedAt(ScittReceipt receipt, StatusToken token) {
+        if (token.issuedAt() != null) {
+            return token.issuedAt();
+        }
+        if (receipt.protectedHeader() != null && receipt.protectedHeader().cwtClaims() != null) {
+            return receipt.protectedHeader().cwtClaims().issuedAtTime();
+        }
+        return null;
     }
 
     // verifyBinding ties a verified proof, status token, and receipt to one
@@ -298,7 +344,8 @@ public final class CallerVerifier {
     private static PopException mapExpectation(ScittExpectation expectation) {
         ErrorType type = switch (expectation.status()) {
             case INVALID_RECEIPT -> ErrorType.RECEIPT_INVALID;
-            case INVALID_TOKEN, TOKEN_EXPIRED, AGENT_REVOKED, AGENT_INACTIVE, KEY_NOT_FOUND -> ErrorType.STATUS_INVALID;
+            case INVALID_TOKEN, TOKEN_EXPIRED, AGENT_REVOKED, AGENT_INACTIVE -> ErrorType.STATUS_INVALID;
+            case KEY_NOT_FOUND -> ErrorType.UNKNOWN_SIGNING_KEY;
             case PARSE_ERROR, NOT_PRESENT -> ErrorType.SCITT_HEADER_INVALID;
             // Unreachable: mapExpectation runs only when !expectation.isVerified().
             case VERIFIED -> throw new IllegalStateException("mapExpectation called on a verified expectation");

@@ -19,7 +19,10 @@ import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
+import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
@@ -36,6 +39,7 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
@@ -44,6 +48,7 @@ class DpopProofVerifierTest {
 
     private static final String METHOD = "POST";
     private static final String URL = "https://api.example.com/agents";
+    private static final String EMPTY_CONTENT_DIGEST = "47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU";
 
     private static KeyPair keyA;
     private static KeyPair keyB;
@@ -375,35 +380,69 @@ class DpopProofVerifierTest {
     }
 
     @Test
-    void rejectsContentDigestWithoutOption() throws Exception {
-        String proof = signerA().sign(METHOD, URL, "body".getBytes(StandardCharsets.UTF_8));
+    void rejectsMissingContentDigest() throws Exception {
+        Map<String, Object> claims = baseClaims(Instant.now());
+        claims.remove("ans_content_digest");
+        String proof = craft(claims, (ECPrivateKey) keyA.getPrivate());
 
         PopException ex = catchThrowableOfType(
-            () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(), VerifyOptions.none()),
+            () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(), null),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.MALFORMED_PROOF);
+        assertThat(ex.getMessage()).contains("ans_content_digest");
+    }
+
+    @ParameterizedTest
+    @MethodSource("malformedContentDigests")
+    void rejectsMalformedContentDigest(String malformed) throws Exception {
+        Map<String, Object> claims = baseClaims(Instant.now());
+        claims.put("ans_content_digest", malformed);
+        String proof = craft(claims, (ECPrivateKey) keyA.getPrivate());
+
+        PopException ex = catchThrowableOfType(
+            () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(), null),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.MALFORMED_PROOF);
+    }
+
+    static Stream<String> malformedContentDigests() {
+        return Stream.of(
+            "not-base64url!",
+            Base64Url.encode(new byte[31]),
+            Base64Url.encode(new byte[33]),
+            EMPTY_CONTENT_DIGEST + "=");
+    }
+
+    @Test
+    void acceptsEmptyContentDigestForRequestWithoutContent() throws Exception {
+        String proof = signerA().sign(METHOD, URL);
+
+        ProofResult result = verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(),
+            VerifyOptions.none());
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void rejectsContentAddedToRequestSignedWithoutContent() throws Exception {
+        String proof = signerA().sign(METHOD, URL);
+
+        PopException ex = catchThrowableOfType(
+            () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(),
+                VerifyOptions.none().withReceivedContent(() -> "injected".getBytes(StandardCharsets.UTF_8))),
             PopException.class);
 
         assertThat(ex.category()).isEqualTo(ErrorType.CONTENT_BINDING_MISMATCH);
     }
 
     @Test
-    void acceptsMissingContentWhenNotRequired() throws Exception {
-        String proof = signerA().sign(METHOD, URL);
-        byte[] bodyHash = sha256("body".getBytes(StandardCharsets.UTF_8));
-
-        ProofResult result = verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(),
-            VerifyOptions.none().withContentSha256(bodyHash));
-
-        assertThat(result).isNotNull();
-    }
-
-    @Test
-    void rejectsMissingContentWhenRequired() throws Exception {
-        String proof = signerA().sign(METHOD, URL);
-        byte[] bodyHash = sha256("body".getBytes(StandardCharsets.UTF_8));
+    void rejectsContentRemovedFromSignedRequest() throws Exception {
+        String proof = signerA().sign(METHOD, URL, "body".getBytes(StandardCharsets.UTF_8));
 
         PopException ex = catchThrowableOfType(
-            () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(),
-                VerifyOptions.none().withContentSha256(bodyHash).withRequiredContentBinding()),
+            () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(), VerifyOptions.none()),
             PopException.class);
 
         assertThat(ex.category()).isEqualTo(ErrorType.CONTENT_BINDING_MISMATCH);
@@ -415,7 +454,7 @@ class DpopProofVerifierTest {
         String proof = signerA().sign(METHOD, URL, body);
 
         ProofResult result = verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(),
-            VerifyOptions.none().withContentSha256(sha256(body)).withRequiredContentBinding());
+            VerifyOptions.none().withReceivedContent(() -> body));
 
         assertThat(result).isNotNull();
     }
@@ -423,26 +462,79 @@ class DpopProofVerifierTest {
     @Test
     void rejectsContentMismatch() throws Exception {
         String proof = signerA().sign(METHOD, URL, "real-body".getBytes(StandardCharsets.UTF_8));
-        byte[] otherHash = sha256("tampered-body".getBytes(StandardCharsets.UTF_8));
 
         PopException ex = catchThrowableOfType(
             () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(),
-                VerifyOptions.none().withContentSha256(otherHash)),
+                VerifyOptions.none().withReceivedContent(() -> "tampered-body".getBytes(StandardCharsets.UTF_8))),
             PopException.class);
 
         assertThat(ex.category()).isEqualTo(ErrorType.CONTENT_BINDING_MISMATCH);
     }
 
     @Test
-    void rejectsBadLengthContentSha256() throws Exception {
+    void rejectsUnreadableContent() throws Exception {
         String proof = signerA().sign(METHOD, URL);
 
         PopException ex = catchThrowableOfType(
             () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(),
-                VerifyOptions.none().withContentSha256(new byte[16])),
+                VerifyOptions.none().withReceivedContent(() -> {
+                    throw new IOException("connection reset");
+                })),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.CONTENT_UNREADABLE);
+    }
+
+    @Test
+    void nullContentFromSourceIsMisconfigured() throws Exception {
+        String proof = signerA().sign(METHOD, URL);
+
+        PopException ex = catchThrowableOfType(
+            () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(),
+                VerifyOptions.none().withReceivedContent(() -> null)),
             PopException.class);
 
         assertThat(ex.category()).isEqualTo(ErrorType.MISCONFIGURED);
+    }
+
+    @Test
+    void contentIsNotReadWhenAnEarlierCheckFails() throws Exception {
+        String proof = signerA().sign("GET", URL);
+        CountingSource source = new CountingSource(new byte[0]);
+
+        catchThrowableOfType(
+            () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, cache(),
+                VerifyOptions.none().withReceivedContent(source)),
+            PopException.class);
+
+        assertThat(source.reads).isZero();
+    }
+
+    @Test
+    void contentIsReadOnceBeforeReplayIsRecorded() throws Exception {
+        byte[] body = "body".getBytes(StandardCharsets.UTF_8);
+        String proof = signerA().sign(METHOD, URL, body);
+        CountingSource source = new CountingSource(body);
+        CapturingCache replay = new CapturingCache();
+
+        verifier.verify(proof, METHOD, URL, Instant.now(), null, replay,
+            VerifyOptions.none().withReceivedContent(source));
+
+        assertThat(source.reads).isEqualTo(1);
+        assertThat(replay.lastKey).isNotNull();
+    }
+
+    @Test
+    void contentMismatchDoesNotRecordReplay() throws Exception {
+        String proof = signerA().sign(METHOD, URL, "real".getBytes(StandardCharsets.UTF_8));
+        CapturingCache replay = new CapturingCache();
+
+        catchThrowableOfType(
+            () -> verifier.verify(proof, METHOD, URL, Instant.now(), null, replay,
+                VerifyOptions.none().withReceivedContent(() -> "fake".getBytes(StandardCharsets.UTF_8))),
+            PopException.class);
+
+        assertThat(replay.lastKey).isNull();
     }
 
     @Test
@@ -499,6 +591,7 @@ class DpopProofVerifierTest {
         claims.put("htu", "https://api.example.com/agents");
         claims.put("iat", iat.getEpochSecond());
         claims.put("jti", "test-jti-" + iat.getEpochSecond());
+        claims.put("ans_content_digest", EMPTY_CONTENT_DIGEST);
         return claims;
     }
 
@@ -539,6 +632,21 @@ class DpopProofVerifierTest {
         return new JcaX509CertificateConverter()
             .setProvider(BouncyCastleProvider.PROVIDER_NAME)
             .getCertificate(builder.build(signer));
+    }
+
+    private static final class CountingSource implements ContentSource {
+        private final byte[] content;
+        private int reads;
+
+        private CountingSource(byte[] content) {
+            this.content = content;
+        }
+
+        @Override
+        public byte[] read() {
+            reads++;
+            return content;
+        }
     }
 
     private static final class CapturingCache implements ReplayCache {

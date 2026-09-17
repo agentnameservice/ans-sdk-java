@@ -7,8 +7,9 @@ package com.godaddy.ans.sdk.pop;
  */
 public enum ErrorType {
     /**
-     * A structurally invalid DPoP proof (bad compact JWS, base64, JSON, or a
-     * missing required header or claim).
+     * A structurally invalid DPoP proof (bad compact JWS, base64, JSON, a missing
+     * required header or claim, or an {@code ans_content_digest} that is not the
+     * base64url of a SHA-256 digest).
      */
     MALFORMED_PROOF,
     /**
@@ -84,11 +85,23 @@ public enum ErrorType {
      */
     EXPECTED_PEER_MISMATCH,
     /**
-     * The proof's ans_content_digest and the request body disagree: a digest
-     * present with no body-hash supplied, a required body-hash with no digest,
-     * or a hash mismatch (ANS-6 §7.13). Mirrors ath binding in both directions.
+     * The SHA-256 of the received request content does not equal the proof's
+     * {@code ans_content_digest} (ANS-6 §7.13): content was added to, removed
+     * from, or rewritten in the request after it was signed.
      */
     CONTENT_BINDING_MISMATCH,
+    /**
+     * The request content could not be read while checking
+     * {@code ans_content_digest}: an I/O failure, or content larger than the
+     * callee's bound. The proof is rejected without recording its jti.
+     */
+    CONTENT_UNREADABLE,
+    /**
+     * The receipt or status token is signed by a key the verifier does not hold
+     * and no refresh produced it (ANS-6 §4.5, §9.5). Usually a stale root-key
+     * cache after the Transparency Log added a key, not a bad caller.
+     */
+    UNKNOWN_SIGNING_KEY,
     /**
      * The proof's ans_profile claim selects a rule-set revision this verifier
      * does not implement (ANS-6 §7.12). Absent means revision 1; only revision 1

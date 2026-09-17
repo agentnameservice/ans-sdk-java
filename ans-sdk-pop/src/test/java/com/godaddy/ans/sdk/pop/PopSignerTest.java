@@ -192,13 +192,26 @@ class PopSignerTest {
     }
 
     @Test
-    void signWithEmptyContentHasNoDigest() throws Exception {
+    void signWithEmptyContentCarriesEmptyContentDigest() throws Exception {
         PopSigner signer = PopSigner.create((ECPrivateKey) p256A.getPrivate(), certA.getEncoded());
 
         String compact = signer.sign("POST", "https://api.example.com/x", new byte[0]);
 
         Proof.Claims claims = Proof.parseClaims(Proof.acceptES256DPoP(compact).jws().getPayload());
-        assertThat(claims.ansContentDigest()).isNull();
+        assertThat(claims.ansContentDigest()).isEqualTo("47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU");
+    }
+
+    @Test
+    void signWithoutContentCarriesEmptyContentDigest() throws Exception {
+        PopSigner signer = PopSigner.create((ECPrivateKey) p256A.getPrivate(), certA.getEncoded());
+
+        Proof.Claims plain = Proof.parseClaims(
+            Proof.acceptES256DPoP(signer.sign("GET", "https://api.example.com/x")).jws().getPayload());
+        Proof.Claims withToken = Proof.parseClaims(
+            Proof.acceptES256DPoP(signer.sign("GET", "https://api.example.com/x", "token")).jws().getPayload());
+
+        assertThat(plain.ansContentDigest()).isEqualTo("47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU");
+        assertThat(withToken.ansContentDigest()).isEqualTo("47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU");
     }
 
     @Test

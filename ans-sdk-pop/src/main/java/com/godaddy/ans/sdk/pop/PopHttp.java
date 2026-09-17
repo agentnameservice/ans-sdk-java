@@ -18,29 +18,59 @@ public final class PopHttp {
     }
 
     /**
-     * Signs a DPoP proof for the request and attaches it as the {@code DPoP}
-     * header, then copies the SCITT headers. When {@code accessToken} is
-     * non-null, the proof also binds it via ath (RFC 9449 §4.2 / §7.1).
+     * Signs a DPoP proof for a request without content, attaches it as the
+     * {@code DPoP} header, then sets the SCITT headers. A request that already
+     * carries content is rejected, because the proof would not bind it; use
+     * {@link #attachIdentity(HttpRequest.Builder, PopSigner, Map, String, byte[])}.
      */
     public static void attachIdentity(HttpRequest.Builder req, PopSigner signer,
             Map<String, List<String>> scittHeaders, String accessToken) throws PopException {
+        attachIdentity(req, signer, scittHeaders, accessToken, Proof.EMPTY_CONTENT);
+    }
+
+    /**
+     * Signs a DPoP proof binding the request and {@code content}, attaches it as
+     * the {@code DPoP} header, then sets the SCITT headers. {@code content} must be
+     * the exact octets the request transmits (RFC 9110 §6.4: after transfer
+     * coding, with any content coding still applied); the request body is set
+     * from the same array so the two cannot diverge, and a request that already
+     * carries content the proof would not bind is rejected. Pass an empty array
+     * for a request without content. When {@code accessToken} is non-null, the
+     * proof also binds it via ath (RFC 9449 §4.2 / §7.1).
+     *
+     * <p>Security headers are single-valued (ANS-6 §4.6): each SCITT header is
+     * set, replacing any value already on the builder, and a multi-valued entry
+     * is rejected.
+     */
+    public static void attachIdentity(HttpRequest.Builder req, PopSigner signer,
+            Map<String, List<String>> scittHeaders, String accessToken, byte[] content) throws PopException {
         Objects.requireNonNull(req, "req");
         Objects.requireNonNull(signer, "signer");
         Objects.requireNonNull(scittHeaders, "scittHeaders");
+        Objects.requireNonNull(content, "content");
 
         HttpRequest snapshot = req.build();
         String method = snapshot.method();
         String url = snapshot.uri().toString();
+        if (content.length > 0) {
+            req.method(method, HttpRequest.BodyPublishers.ofByteArray(content));
+        } else if (snapshot.bodyPublisher().map(HttpRequest.BodyPublisher::contentLength).orElse(0L) != 0) {
+            throw new PopException(ErrorType.MISCONFIGURED,
+                "request carries content the proof would not bind; pass it as content");
+        }
 
         String proof = accessToken != null
-            ? signer.sign(method, url, accessToken)
-            : signer.sign(method, url);
+            ? signer.sign(method, url, accessToken, content)
+            : signer.sign(method, url, content);
 
         req.setHeader(DPOP_HEADER, proof);
         for (Map.Entry<String, List<String>> entry : scittHeaders.entrySet()) {
-            for (String value : entry.getValue()) {
-                req.header(entry.getKey(), value);
+            List<String> values = entry.getValue();
+            if (values == null || values.size() != 1) {
+                throw new PopException(ErrorType.MISCONFIGURED,
+                    "security header " + entry.getKey() + " must have exactly one value");
             }
+            req.setHeader(entry.getKey(), values.get(0));
         }
     }
 

@@ -12,27 +12,27 @@ public final class CallerOptions {
     private final String expectedPeer;
     // A fixed verification time, or null to use the current time.
     private final Instant clock;
-    // The SHA-256 of the request body (32 bytes), or null when no body is bound.
-    private final byte[] contentSha256;
-    // Whether the proof MUST carry an ans_content_digest.
-    private final boolean requireContentBinding;
+    // The request content, or null when the request carried none.
+    private final ContentSource receivedContent;
 
-    private CallerOptions(String accessToken, String expectedPeer, Instant clock,
-                          byte[] contentSha256, boolean requireContentBinding) {
+    private CallerOptions(String accessToken, String expectedPeer, Instant clock, ContentSource receivedContent) {
         this.accessToken = accessToken;
         this.expectedPeer = expectedPeer;
         this.clock = clock;
-        this.contentSha256 = contentSha256;
-        this.requireContentBinding = requireContentBinding;
+        this.receivedContent = receivedContent;
     }
 
+    /**
+     * No access token, any proven agent accepted, the current time, and no
+     * request content: the proof's ans_content_digest must be the digest of the
+     * empty octet string (ANS-6 §7.13).
+     */
     public static CallerOptions none() {
-        return new CallerOptions(null, null, null, null, false);
+        return new CallerOptions(null, null, null, null);
     }
 
     public CallerOptions withAccessToken(String token) {
-        return new CallerOptions(Objects.requireNonNull(token, "token"), expectedPeer, clock,
-            contentSha256, requireContentBinding);
+        return new CallerOptions(Objects.requireNonNull(token, "token"), expectedPeer, clock, receivedContent);
     }
 
     /**
@@ -40,28 +40,20 @@ public final class CallerOptions {
      * set, any proven agent authenticates, and the callee authorizes downstream.
      */
     public CallerOptions withExpectedPeer(String peer) {
-        return new CallerOptions(accessToken, Objects.requireNonNull(peer, "peer"), clock,
-            contentSha256, requireContentBinding);
+        return new CallerOptions(accessToken, Objects.requireNonNull(peer, "peer"), clock, receivedContent);
     }
 
     public CallerOptions withClock(Instant now) {
-        return new CallerOptions(accessToken, expectedPeer, Objects.requireNonNull(now, "now"),
-            contentSha256, requireContentBinding);
+        return new CallerOptions(accessToken, expectedPeer, Objects.requireNonNull(now, "now"), receivedContent);
     }
 
     /**
-     * Binds the request body: the proof's ans_content_digest must match the
-     * SHA-256 of the body (ANS-6 §7.13). The caller hashes the body; the digest
-     * must be exactly 32 bytes. The array is copied defensively.
+     * Supplies the request content the proof binds (ANS-6 §7.13). It is read once,
+     * after the proof is bound to a live ANS identity and before the jti is
+     * recorded, and its SHA-256 must equal the proof's ans_content_digest.
      */
-    public CallerOptions withContentSha256(byte[] contentSha256) {
-        Objects.requireNonNull(contentSha256, "contentSha256");
-        return new CallerOptions(accessToken, expectedPeer, clock, contentSha256.clone(), requireContentBinding);
-    }
-
-    /** Requires the proof to carry an ans_content_digest (ANS-6 §7.13). */
-    public CallerOptions withRequiredContentBinding() {
-        return new CallerOptions(accessToken, expectedPeer, clock, contentSha256, true);
+    public CallerOptions withReceivedContent(ContentSource content) {
+        return new CallerOptions(accessToken, expectedPeer, clock, Objects.requireNonNull(content, "content"));
     }
 
     String accessToken() {
@@ -76,11 +68,7 @@ public final class CallerOptions {
         return clock;
     }
 
-    byte[] contentSha256() {
-        return contentSha256;
-    }
-
-    boolean requireContentBinding() {
-        return requireContentBinding;
+    public ContentSource receivedContent() {
+        return receivedContent;
     }
 }

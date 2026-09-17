@@ -3,6 +3,8 @@ package com.godaddy.ans.sdk.pop;
 import com.godaddy.ans.sdk.crypto.CertificateUtils;
 import com.godaddy.ans.sdk.transparency.model.CertType;
 import com.godaddy.ans.sdk.transparency.model.CertificateInfo;
+import com.godaddy.ans.sdk.transparency.scitt.CoseProtectedHeader;
+import com.godaddy.ans.sdk.transparency.scitt.CwtClaims;
 import com.godaddy.ans.sdk.transparency.scitt.ScittExpectation;
 import com.godaddy.ans.sdk.transparency.scitt.ScittHeaders;
 import com.godaddy.ans.sdk.transparency.scitt.ScittReceipt;
@@ -36,8 +38,10 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 class CallerVerifierTest {
@@ -293,14 +297,118 @@ class CallerVerifierTest {
     }
 
     @Test
-    void keyNotFoundMapsToStatusInvalid() {
+    void keyNotFoundMapsToUnknownSigningKey() {
         CallerVerifier verifier = new CallerVerifier(
             new FakeScitt(ScittExpectation.keyNotFound("no key")), DEFAULT_SKEW);
         PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
             proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
             METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
 
+        assertThat(ex.category()).isEqualTo(ErrorType.UNKNOWN_SIGNING_KEY);
+    }
+
+    @Test
+    void unknownSigningKeyIsRefreshedAndVerificationRetried() throws Exception {
+        FakeScitt scitt = new FakeScitt(ScittExpectation.keyNotFound("no key"), verifiedExpectation());
+        Map<String, PublicKey> fresh = Map.of("k2", keyPair.getPublic());
+        RecordingRefresher refresher = new RecordingRefresher(Optional.of(fresh));
+        CallerVerifier verifier = new CallerVerifier(scitt, DEFAULT_SKEW).withRootKeyRefresher(refresher);
+        StatusToken token = token(ANS_NAME, AGENT_ID, certFingerprint);
+
+        CallerIdentity identity = verifier.verifyParsed(proofJws, receipt(AGENT_ID, ANS_NAME), token,
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none());
+
+        assertThat(identity.agentId()).isEqualTo(AGENT_ID);
+        assertThat(scitt.calls).isEqualTo(2);
+        assertThat(scitt.lastKeys).isSameAs(fresh);
+        assertThat(refresher.calls).isEqualTo(1);
+        assertThat(refresher.lastIssuedAt).isEqualTo(token.issuedAt());
+    }
+
+    @Test
+    void unknownSigningKeyStaysRejectedWhenRefreshDeclines() {
+        FakeScitt scitt = new FakeScitt(ScittExpectation.keyNotFound("no key"));
+        RecordingRefresher refresher = new RecordingRefresher(Optional.empty());
+        CallerVerifier verifier = new CallerVerifier(scitt, DEFAULT_SKEW).withRootKeyRefresher(refresher);
+
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.UNKNOWN_SIGNING_KEY);
+        assertThat(scitt.calls).isEqualTo(1);
+        assertThat(refresher.calls).isEqualTo(1);
+    }
+
+    @Test
+    void unknownSigningKeyStaysRejectedWhenRefresherFails() {
+        FakeScitt scitt = new FakeScitt(ScittExpectation.keyNotFound("no key"));
+        CallerVerifier verifier = new CallerVerifier(scitt, DEFAULT_SKEW)
+            .withRootKeyRefresher(issuedAt -> {
+                throw new IllegalStateException("transparency log unreachable");
+            });
+
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.UNKNOWN_SIGNING_KEY);
+        assertThat(scitt.calls).isEqualTo(1);
+    }
+
+    @Test
+    void refresherIsNotConsultedForOtherScittFailures() {
+        RecordingRefresher refresher = new RecordingRefresher(Optional.of(Map.of()));
+        CallerVerifier verifier = new CallerVerifier(new FakeScitt(ScittExpectation.expired()), DEFAULT_SKEW)
+            .withRootKeyRefresher(refresher);
+
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
         assertThat(ex.category()).isEqualTo(ErrorType.STATUS_INVALID);
+        assertThat(refresher.calls).isZero();
+    }
+
+    @Test
+    void refreshIsSkippedWhenNoArtifactCarriesAnIssueTime() {
+        RecordingRefresher refresher = new RecordingRefresher(Optional.of(Map.of()));
+        FakeScitt scitt = new FakeScitt(ScittExpectation.keyNotFound("no key"));
+        CallerVerifier verifier = new CallerVerifier(scitt, DEFAULT_SKEW).withRootKeyRefresher(refresher);
+        StatusToken undated = new StatusToken(AGENT_ID, StatusToken.Status.ACTIVE, null,
+            Instant.now().plusSeconds(3600), ANS_NAME,
+            List.of(new CertificateInfo(certFingerprint, CertType.X509_EV_CLIENT)), List.of(), Map.of(), null);
+
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), undated,
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.UNKNOWN_SIGNING_KEY);
+        assertThat(refresher.calls).isZero();
+    }
+
+    @Test
+    void refreshUsesTheReceiptIssueTimeWhenTheTokenHasNone() {
+        RecordingRefresher refresher = new RecordingRefresher(Optional.empty());
+        FakeScitt scitt = new FakeScitt(ScittExpectation.keyNotFound("no key"));
+        CallerVerifier verifier = new CallerVerifier(scitt, DEFAULT_SKEW).withRootKeyRefresher(refresher);
+        StatusToken undated = new StatusToken(AGENT_ID, StatusToken.Status.ACTIVE, null,
+            Instant.now().plusSeconds(3600), ANS_NAME,
+            List.of(new CertificateInfo(certFingerprint, CertType.X509_EV_CLIENT)), List.of(), Map.of(), null);
+        CwtClaims claims = new CwtClaims("transparency-log.example.com", null, null, null, null, 1_787_529_600L);
+        ScittReceipt dated = new ScittReceipt(new CoseProtectedHeader(-7, null, 1, claims, null), null, null,
+            receipt(AGENT_ID, ANS_NAME).eventPayload(), null);
+
+        catchThrowableOfType(() -> verifier.verifyParsed(proofJws, dated, undated,
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(refresher.calls).isEqualTo(1);
+        assertThat(refresher.lastIssuedAt).isEqualTo(Instant.ofEpochSecond(1_787_529_600L));
+    }
+
+    @Test
+    void withRootKeyRefresherRejectsNull() {
+        assertThatNullPointerException().isThrownBy(() -> verifier().withRootKeyRefresher(null));
     }
 
     @Test
@@ -372,27 +480,57 @@ class CallerVerifierTest {
         byte[] body = "the-request-body".getBytes(StandardCharsets.UTF_8);
         String proofWithContent = PopSigner.create((ECPrivateKey) keyPair.getPrivate(), cert.getEncoded())
             .sign(METHOD, URL, body);
+        CountingSource source = new CountingSource(body);
+        CountingReplay replay = new CountingReplay(false);
 
         CallerIdentity identity = verifier().verifyParsed(
             proofWithContent, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
-            METHOD, URL, Map.of(), new CountingReplay(false),
-            CallerOptions.none().withContentSha256(sha256(body)).withRequiredContentBinding());
+            METHOD, URL, Map.of(), replay, CallerOptions.none().withReceivedContent(source));
 
         assertThat(identity.agentId()).isEqualTo(AGENT_ID);
+        assertThat(source.reads).isEqualTo(1);
+        assertThat(replay.calls).isEqualTo(1);
     }
 
     @Test
-    void contentBindingMismatchRejectedThroughCaller() throws Exception {
+    void contentBindingMismatchRejectedBeforeReplayIsRecorded() throws Exception {
         String proofWithContent = PopSigner.create((ECPrivateKey) keyPair.getPrivate(), cert.getEncoded())
             .sign(METHOD, URL, "real-body".getBytes(StandardCharsets.UTF_8));
+        CountingReplay replay = new CountingReplay(false);
 
         PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
             proofWithContent, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
-            METHOD, URL, Map.of(), new CountingReplay(false),
-            CallerOptions.none().withContentSha256(sha256("tampered-body".getBytes(StandardCharsets.UTF_8)))),
+            METHOD, URL, Map.of(), replay,
+            CallerOptions.none().withReceivedContent(() -> "tampered-body".getBytes(StandardCharsets.UTF_8))),
             PopException.class);
 
         assertThat(ex.category()).isEqualTo(ErrorType.CONTENT_BINDING_MISMATCH);
+        assertThat(replay.calls).isZero();
+    }
+
+    @Test
+    void contentIsNotReadWhenTheIdentityBindingFails() {
+        CountingSource source = new CountingSource(new byte[0]);
+
+        catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, "SHA256:deadbeef"),
+            METHOD, URL, Map.of(), new CountingReplay(false),
+            CallerOptions.none().withReceivedContent(source)), PopException.class);
+
+        assertThat(source.reads).isZero();
+    }
+
+    @Test
+    void contentIsNotReadWhenTheStatusTokenFails() {
+        CountingSource source = new CountingSource(new byte[0]);
+        CallerVerifier verifier = new CallerVerifier(new FakeScitt(ScittExpectation.expired()), DEFAULT_SKEW);
+
+        catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false),
+            CallerOptions.none().withReceivedContent(source)), PopException.class);
+
+        assertThat(source.reads).isZero();
     }
 
     @Test
@@ -455,8 +593,11 @@ class CallerVerifierTest {
     private static final Duration DEFAULT_SKEW = Duration.ofSeconds(120);
 
     private static CallerVerifier verifier() {
-        return new CallerVerifier(new FakeScitt(ScittExpectation.verified(
-            List.of(), List.of(), ANS_NAME, Map.of(), null)), DEFAULT_SKEW);
+        return new CallerVerifier(new FakeScitt(verifiedExpectation()), DEFAULT_SKEW);
+    }
+
+    private static ScittExpectation verifiedExpectation() {
+        return ScittExpectation.verified(List.of(), List.of(), ANS_NAME, Map.of(), null);
     }
 
     private static StatusToken token(String ansName, String agentId, String identityFingerprint) {
@@ -471,10 +612,6 @@ class CallerVerifierTest {
         String json = "{\"payload\":{\"producer\":{\"event\":"
             + "{\"ansId\":\"" + agentId + "\",\"ansName\":\"" + ansName + "\"}}}}";
         return new ScittReceipt(null, null, null, json.getBytes(StandardCharsets.UTF_8), null);
-    }
-
-    private static byte[] sha256(byte[] input) throws Exception {
-        return java.security.MessageDigest.getInstance("SHA-256").digest(input);
     }
 
     private static KeyPair ec() throws Exception {
@@ -498,15 +635,21 @@ class CallerVerifierTest {
             .getCertificate(builder.build(signer));
     }
 
+    // Answers verify() with the given expectations in order, repeating the last one.
     private static final class FakeScitt implements ScittVerifier {
-        private final ScittExpectation expectation;
+        private final ScittExpectation[] expectations;
+        private int calls;
+        private Map<String, PublicKey> lastKeys;
 
-        private FakeScitt(ScittExpectation expectation) {
-            this.expectation = expectation;
+        private FakeScitt(ScittExpectation... expectations) {
+            this.expectations = expectations;
         }
 
         @Override
         public ScittExpectation verify(ScittReceipt receipt, StatusToken token, Map<String, PublicKey> rootKeys) {
+            lastKeys = rootKeys;
+            ScittExpectation expectation = expectations[Math.min(calls, expectations.length - 1)];
+            calls++;
             return expectation;
         }
 
@@ -514,6 +657,38 @@ class CallerVerifierTest {
         public ScittVerificationResult postVerify(String hostname, X509Certificate serverCert,
                                                   ScittExpectation expectation) {
             return null;
+        }
+    }
+
+    private static final class RecordingRefresher implements RootKeyRefresher {
+        private final Optional<Map<String, PublicKey>> result;
+        private int calls;
+        private Instant lastIssuedAt;
+
+        private RecordingRefresher(Optional<Map<String, PublicKey>> result) {
+            this.result = result;
+        }
+
+        @Override
+        public Optional<Map<String, PublicKey>> refresh(Instant artifactIssuedAt) {
+            calls++;
+            lastIssuedAt = artifactIssuedAt;
+            return result;
+        }
+    }
+
+    private static final class CountingSource implements ContentSource {
+        private final byte[] content;
+        private int reads;
+
+        private CountingSource(byte[] content) {
+            this.content = content;
+        }
+
+        @Override
+        public byte[] read() {
+            reads++;
+            return content;
         }
     }
 

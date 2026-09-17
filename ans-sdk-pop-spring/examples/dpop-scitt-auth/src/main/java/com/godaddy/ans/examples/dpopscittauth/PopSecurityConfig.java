@@ -4,6 +4,7 @@ import com.godaddy.ans.sdk.pop.CaffeineReplayCache;
 import com.godaddy.ans.sdk.pop.ReplayCache;
 import com.godaddy.ans.sdk.pop.spring.PopAuthenticationFilter;
 import com.godaddy.ans.sdk.transparency.TransparencyClient;
+import com.godaddy.ans.sdk.transparency.scitt.RefreshDecision;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -11,7 +12,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.security.PublicKey;
+import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
@@ -49,10 +52,19 @@ public class PopSecurityConfig {
         PopAuthenticationFilter filter = PopAuthenticationFilter
             .builder(expectedIssuer, rootKeys, replayCache)
             .withTrustedHosts(trustedHost)
+            .withRootKeyRefresher(artifactIssuedAt -> refreshRootKeys(transparencyClient, artifactIssuedAt))
             .build();
 
         FilterRegistrationBean<PopAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
         registration.addUrlPatterns("/*");
         return registration;
+    }
+
+    private static Optional<Map<String, PublicKey>> refreshRootKeys(TransparencyClient client,
+                                                                    Instant artifactIssuedAt) {
+        RefreshDecision decision = client.refreshRootKeysIfNeeded(artifactIssuedAt)
+            .orTimeout(2, TimeUnit.SECONDS)
+            .join();
+        return decision.isRefreshed() ? Optional.of(decision.keys()) : Optional.empty();
     }
 }

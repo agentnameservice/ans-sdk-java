@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/agentnameservice/ans-sdk-java/compare/v0.2.0...v0.2.1) (2026-09-17)
+
+
+### Miscellaneous
+
+* **deps:** Bump the actions-minor-patch group across 1 directory with 2 updates ([#110](https://github.com/agentnameservice/ans-sdk-java/issues/110)) ([398e463](https://github.com/agentnameservice/ans-sdk-java/commit/398e463ae1ed7ae8963f51bacbdfdd1636420875))
+
 ## [0.2.0](https://github.com/agentnameservice/ans-sdk-java/compare/v0.1.9...v0.2.0) (2026-08-28)
 
 

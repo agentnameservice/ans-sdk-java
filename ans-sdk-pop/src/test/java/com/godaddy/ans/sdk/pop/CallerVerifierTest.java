@@ -1,0 +1,709 @@
+package com.godaddy.ans.sdk.pop;
+
+import com.godaddy.ans.sdk.crypto.CertificateUtils;
+import com.godaddy.ans.sdk.transparency.model.CertType;
+import com.godaddy.ans.sdk.transparency.model.CertificateInfo;
+import com.godaddy.ans.sdk.transparency.scitt.CoseProtectedHeader;
+import com.godaddy.ans.sdk.transparency.scitt.CwtClaims;
+import com.godaddy.ans.sdk.transparency.scitt.ScittExpectation;
+import com.godaddy.ans.sdk.transparency.scitt.ScittHeaders;
+import com.godaddy.ans.sdk.transparency.scitt.ScittReceipt;
+import com.godaddy.ans.sdk.transparency.scitt.ScittVerifier;
+import com.godaddy.ans.sdk.transparency.scitt.StatusToken;
+
+import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.GeneralName;
+import org.bouncycastle.asn1.x509.GeneralNames;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.PublicKey;
+import java.security.Security;
+import java.security.cert.X509Certificate;
+import java.security.interfaces.ECPrivateKey;
+import java.security.spec.ECGenParameterSpec;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
+
+class CallerVerifierTest {
+
+    private static final String METHOD = "POST";
+    private static final String URL = "https://rp.example.com/verify";
+    private static final String AGENT_ID = "agent-123";
+    private static final String ANS_NAME = "ans://agent.example.com";
+
+    private static KeyPair keyPair;
+    private static X509Certificate cert;
+    private static String certFingerprint;
+    private static String proofJws;
+
+    private static KeyPair noSanKeyPair;
+    private static X509Certificate noSanCert;
+    private static String noSanFingerprint;
+    private static String noSanProofJws;
+
+    @BeforeAll
+    static void setUp() throws Exception {
+        Security.addProvider(new BouncyCastleProvider());
+
+        keyPair = ec();
+        cert = selfSigned(keyPair, ANS_NAME);
+        certFingerprint = CertificateUtils.computeSha256Fingerprint(cert);
+        proofJws = PopSigner.create((ECPrivateKey) keyPair.getPrivate(), cert.getEncoded()).sign(METHOD, URL);
+
+        noSanKeyPair = ec();
+        noSanCert = selfSigned(noSanKeyPair, null);
+        noSanFingerprint = CertificateUtils.computeSha256Fingerprint(noSanCert);
+        noSanProofJws = PopSigner.create((ECPrivateKey) noSanKeyPair.getPrivate(), noSanCert.getEncoded())
+            .sign(METHOD, URL);
+    }
+
+    @Test
+    void happyPathReturnsIdentity() throws Exception {
+        CountingReplay replay = new CountingReplay(false);
+        CallerIdentity identity = verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), replay, CallerOptions.none());
+
+        assertThat(identity.ansName()).isEqualTo(ANS_NAME);
+        assertThat(identity.agentId()).isEqualTo(AGENT_ID);
+        assertThat(identity.jkt()).isNotBlank();
+        assertThat(identity.fingerprintHex()).hasSize(64);
+        assertThat(replay.calls).isEqualTo(1);
+    }
+
+    @Test
+    void bindingRejectsFingerprintNotInStatusToken() {
+        CountingReplay replay = new CountingReplay(false);
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, "SHA256:deadbeef"),
+            METHOD, URL, Map.of(), replay, CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+        assertThat(replay.calls).isZero();
+    }
+
+    @Test
+    void bindingRejectsAnsHostMismatch() {
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, "ans://other.example.com"),
+            token("ans://other.example.com", AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void bindingAcceptsVersionLabelHost() throws Exception {
+        String versioned = "ans://v1.2.3.agent.example.com";
+        CallerIdentity identity = verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, versioned), token(versioned, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none());
+
+        assertThat(identity.ansName()).isEqualTo(versioned);
+    }
+
+    @Test
+    void bindingRejectsNoSan() {
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            noSanProofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, noSanFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void bindingRejectsReceiptAgentMismatch() {
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt("other-agent", ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void bindingRejectsMissingReceiptAgent() {
+        ScittReceipt receipt = new ScittReceipt(null, null, null,
+            "{\"payload\":{\"producer\":{\"event\":{\"ansName\":\"ans://agent.example.com\"}}}}"
+                .getBytes(StandardCharsets.UTF_8), null);
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt, token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void bindingRejectsReceiptAnsNameMismatch() {
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, "ans://impostor.example.com"),
+            token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void bindingRejectsReceiptAnsNameVersionMismatch() {
+        // Cert SAN and token share the host, so the host check passes; the receipt and token differ only
+        // in the version segment, which must bind through the full-name comparison.
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, "ans://v2.0.0.agent.example.com"),
+            token("ans://v1.2.3.agent.example.com", AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void bindingAcceptsReceiptAnsNameCaseInsensitively() throws Exception {
+        CallerIdentity identity = verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, "ANS://Agent.Example.Com"),
+            token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none());
+
+        assertThat(identity.agentId()).isEqualTo(AGENT_ID);
+    }
+
+    @Test
+    void bindingRejectsMissingReceiptAnsName() {
+        ScittReceipt receipt = new ScittReceipt(null, null, null,
+            ("{\"payload\":{\"producer\":{\"event\":{\"ansId\":\"" + AGENT_ID + "\"}}}}")
+                .getBytes(StandardCharsets.UTF_8), null);
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt, token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void replayNotConsumedWhenLaterCheckFails() {
+        CountingReplay replay = new CountingReplay(false);
+        catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), replay,
+            CallerOptions.none().withExpectedPeer("ans://other.example.com")), PopException.class);
+
+        assertThat(replay.calls).isZero();
+    }
+
+    @Test
+    void replayDetectedRejects() {
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(true), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.REPLAY);
+    }
+
+    @Test
+    void expectedPeerMatchAccepts() throws Exception {
+        CallerIdentity identity = verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false),
+            CallerOptions.none().withExpectedPeer("ans://agent.example.com"));
+
+        assertThat(identity.agentId()).isEqualTo(AGENT_ID);
+    }
+
+    @Test
+    void expectedPeerMismatchRejects() {
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false),
+            CallerOptions.none().withExpectedPeer("ans://other.example.com")), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.EXPECTED_PEER_MISMATCH);
+    }
+
+    @Test
+    void nullReplayCacheRejected() {
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), null, CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.MISCONFIGURED);
+    }
+
+    @Test
+    void nullRootKeysRejected() {
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, null, new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.MISCONFIGURED);
+    }
+
+    @Test
+    void expiredStatusTokenMapsToStatusInvalid() {
+        CallerVerifier verifier = new CallerVerifier(new FakeScitt(ScittExpectation.expired()), DEFAULT_SKEW);
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.STATUS_INVALID);
+    }
+
+    @Test
+    void invalidReceiptMapsToReceiptInvalid() {
+        CallerVerifier verifier = new CallerVerifier(
+            new FakeScitt(ScittExpectation.invalidReceipt("bad")), DEFAULT_SKEW);
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.RECEIPT_INVALID);
+    }
+
+    @Test
+    void revokedAgentMapsToStatusInvalid() {
+        CallerVerifier verifier = new CallerVerifier(new FakeScitt(ScittExpectation.revoked(ANS_NAME)), DEFAULT_SKEW);
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.STATUS_INVALID);
+    }
+
+    @Test
+    void inactiveAgentMapsToStatusInvalid() {
+        CallerVerifier verifier = new CallerVerifier(
+            new FakeScitt(ScittExpectation.inactive(StatusToken.Status.DEPRECATED, ANS_NAME)), DEFAULT_SKEW);
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.STATUS_INVALID);
+    }
+
+    @Test
+    void keyNotFoundMapsToUnknownSigningKey() {
+        CallerVerifier verifier = new CallerVerifier(
+            new FakeScitt(ScittExpectation.keyNotFound("no key")), DEFAULT_SKEW);
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.UNKNOWN_SIGNING_KEY);
+    }
+
+    @Test
+    void unknownSigningKeyIsRefreshedAndVerificationRetried() throws Exception {
+        FakeScitt scitt = new FakeScitt(ScittExpectation.keyNotFound("no key"), verifiedExpectation());
+        Map<String, PublicKey> fresh = Map.of("k2", keyPair.getPublic());
+        RecordingRefresher refresher = new RecordingRefresher(Optional.of(fresh));
+        CallerVerifier verifier = new CallerVerifier(scitt, DEFAULT_SKEW).withRootKeyRefresher(refresher);
+        StatusToken token = token(ANS_NAME, AGENT_ID, certFingerprint);
+
+        CallerIdentity identity = verifier.verifyParsed(proofJws, receipt(AGENT_ID, ANS_NAME), token,
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none());
+
+        assertThat(identity.agentId()).isEqualTo(AGENT_ID);
+        assertThat(scitt.calls).isEqualTo(2);
+        assertThat(scitt.lastKeys).isSameAs(fresh);
+        assertThat(refresher.calls).isEqualTo(1);
+        assertThat(refresher.lastIssuedAt).isEqualTo(token.issuedAt());
+    }
+
+    @Test
+    void unknownSigningKeyStaysRejectedWhenRefreshDeclines() {
+        FakeScitt scitt = new FakeScitt(ScittExpectation.keyNotFound("no key"));
+        RecordingRefresher refresher = new RecordingRefresher(Optional.empty());
+        CallerVerifier verifier = new CallerVerifier(scitt, DEFAULT_SKEW).withRootKeyRefresher(refresher);
+
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.UNKNOWN_SIGNING_KEY);
+        assertThat(scitt.calls).isEqualTo(1);
+        assertThat(refresher.calls).isEqualTo(1);
+    }
+
+    @Test
+    void unknownSigningKeyStaysRejectedWhenRefresherFails() {
+        FakeScitt scitt = new FakeScitt(ScittExpectation.keyNotFound("no key"));
+        CallerVerifier verifier = new CallerVerifier(scitt, DEFAULT_SKEW)
+            .withRootKeyRefresher(issuedAt -> {
+                throw new IllegalStateException("transparency log unreachable");
+            });
+
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.UNKNOWN_SIGNING_KEY);
+        assertThat(scitt.calls).isEqualTo(1);
+    }
+
+    @Test
+    void refresherIsNotConsultedForOtherScittFailures() {
+        RecordingRefresher refresher = new RecordingRefresher(Optional.of(Map.of()));
+        CallerVerifier verifier = new CallerVerifier(new FakeScitt(ScittExpectation.expired()), DEFAULT_SKEW)
+            .withRootKeyRefresher(refresher);
+
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.STATUS_INVALID);
+        assertThat(refresher.calls).isZero();
+    }
+
+    @Test
+    void refreshIsSkippedWhenNoArtifactCarriesAnIssueTime() {
+        RecordingRefresher refresher = new RecordingRefresher(Optional.of(Map.of()));
+        FakeScitt scitt = new FakeScitt(ScittExpectation.keyNotFound("no key"));
+        CallerVerifier verifier = new CallerVerifier(scitt, DEFAULT_SKEW).withRootKeyRefresher(refresher);
+        StatusToken undated = new StatusToken(AGENT_ID, StatusToken.Status.ACTIVE, null,
+            Instant.now().plusSeconds(3600), ANS_NAME,
+            List.of(new CertificateInfo(certFingerprint, CertType.X509_EV_CLIENT)), List.of(), Map.of(), null);
+
+        PopException ex = catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), undated,
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.UNKNOWN_SIGNING_KEY);
+        assertThat(refresher.calls).isZero();
+    }
+
+    @Test
+    void refreshUsesTheReceiptIssueTimeWhenTheTokenHasNone() {
+        RecordingRefresher refresher = new RecordingRefresher(Optional.empty());
+        FakeScitt scitt = new FakeScitt(ScittExpectation.keyNotFound("no key"));
+        CallerVerifier verifier = new CallerVerifier(scitt, DEFAULT_SKEW).withRootKeyRefresher(refresher);
+        StatusToken undated = new StatusToken(AGENT_ID, StatusToken.Status.ACTIVE, null,
+            Instant.now().plusSeconds(3600), ANS_NAME,
+            List.of(new CertificateInfo(certFingerprint, CertType.X509_EV_CLIENT)), List.of(), Map.of(), null);
+        CwtClaims claims = new CwtClaims("transparency-log.example.com", null, null, null, null, 1_787_529_600L);
+        ScittReceipt dated = new ScittReceipt(new CoseProtectedHeader(-7, null, 1, claims, null), null, null,
+            receipt(AGENT_ID, ANS_NAME).eventPayload(), null);
+
+        catchThrowableOfType(() -> verifier.verifyParsed(proofJws, dated, undated,
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(refresher.calls).isEqualTo(1);
+        assertThat(refresher.lastIssuedAt).isEqualTo(Instant.ofEpochSecond(1_787_529_600L));
+    }
+
+    @Test
+    void withRootKeyRefresherRejectsNull() {
+        assertThatNullPointerException().isThrownBy(() -> verifier().withRootKeyRefresher(null));
+    }
+
+    @Test
+    void missingHeadersRejected() {
+        PopException ex = catchThrowableOfType(() -> verifier().verifyCaller(
+            proofJws, Map.of(), METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.MISSING_HEADERS);
+    }
+
+    @Test
+    void duplicateScittHeaderRejected() {
+        Map<String, List<String>> headers = Map.of(
+            ScittHeaders.SCITT_RECEIPT_HEADER, List.of("a", "b"));
+        PopException ex = catchThrowableOfType(() -> verifier().verifyCaller(
+            proofJws, headers, METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.SCITT_HEADER_INVALID);
+    }
+
+    @Test
+    void invalidBase64HeaderRejected() {
+        Map<String, List<String>> headers = Map.of(
+            ScittHeaders.SCITT_RECEIPT_HEADER, List.of("!!!not-base64!!!"));
+        PopException ex = catchThrowableOfType(() -> verifier().verifyCaller(
+            proofJws, headers, METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.SCITT_HEADER_INVALID);
+    }
+
+    @Test
+    void unparseableReceiptRejected() {
+        Map<String, List<String>> headers = Map.of(
+            ScittHeaders.SCITT_RECEIPT_HEADER,
+            List.of(Base64.getEncoder().encodeToString("garbage".getBytes(StandardCharsets.UTF_8))));
+        PopException ex = catchThrowableOfType(() -> verifier().verifyCaller(
+            proofJws, headers, METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.RECEIPT_INVALID);
+    }
+
+    @Test
+    void createBuildsVerifier() {
+        assertThat(CallerVerifier.create("https://tl.example.com")).isNotNull();
+        assertThat(CallerVerifier.create("https://tl.example.com",
+            Duration.ofSeconds(30), Duration.ofSeconds(90))).isNotNull();
+    }
+
+    @Test
+    void accessTokenBindingAndInjectedClockAccepted() throws Exception {
+        String token = "Kz~8mXK1EalYznwH-LC-1fBAo.4Ljp~zsPE_NeO.gxU";
+        String proofWithAth = PopSigner.create((ECPrivateKey) keyPair.getPrivate(), cert.getEncoded())
+            .sign(METHOD, URL, token);
+
+        CallerIdentity identity = verifier().verifyParsed(
+            proofWithAth, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false),
+            CallerOptions.none().withAccessToken(token).withClock(Instant.now()));
+
+        assertThat(identity.agentId()).isEqualTo(AGENT_ID);
+    }
+
+    @Test
+    void contentBindingAcceptedThroughCaller() throws Exception {
+        byte[] body = "the-request-body".getBytes(StandardCharsets.UTF_8);
+        String proofWithContent = PopSigner.create((ECPrivateKey) keyPair.getPrivate(), cert.getEncoded())
+            .sign(METHOD, URL, body);
+        CountingSource source = new CountingSource(body);
+        CountingReplay replay = new CountingReplay(false);
+
+        CallerIdentity identity = verifier().verifyParsed(
+            proofWithContent, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), replay, CallerOptions.none().withReceivedContent(source));
+
+        assertThat(identity.agentId()).isEqualTo(AGENT_ID);
+        assertThat(source.reads).isEqualTo(1);
+        assertThat(replay.calls).isEqualTo(1);
+    }
+
+    @Test
+    void contentBindingMismatchRejectedBeforeReplayIsRecorded() throws Exception {
+        String proofWithContent = PopSigner.create((ECPrivateKey) keyPair.getPrivate(), cert.getEncoded())
+            .sign(METHOD, URL, "real-body".getBytes(StandardCharsets.UTF_8));
+        CountingReplay replay = new CountingReplay(false);
+
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofWithContent, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), replay,
+            CallerOptions.none().withReceivedContent(() -> "tampered-body".getBytes(StandardCharsets.UTF_8))),
+            PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.CONTENT_BINDING_MISMATCH);
+        assertThat(replay.calls).isZero();
+    }
+
+    @Test
+    void contentIsNotReadWhenTheIdentityBindingFails() {
+        CountingSource source = new CountingSource(new byte[0]);
+
+        catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, "SHA256:deadbeef"),
+            METHOD, URL, Map.of(), new CountingReplay(false),
+            CallerOptions.none().withReceivedContent(source)), PopException.class);
+
+        assertThat(source.reads).isZero();
+    }
+
+    @Test
+    void contentIsNotReadWhenTheStatusTokenFails() {
+        CountingSource source = new CountingSource(new byte[0]);
+        CallerVerifier verifier = new CallerVerifier(new FakeScitt(ScittExpectation.expired()), DEFAULT_SKEW);
+
+        catchThrowableOfType(() -> verifier.verifyParsed(
+            proofJws, receipt(AGENT_ID, ANS_NAME), token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false),
+            CallerOptions.none().withReceivedContent(source)), PopException.class);
+
+        assertThat(source.reads).isZero();
+    }
+
+    @Test
+    void receiptNullPayloadRejected() {
+        ScittReceipt nullPayloadReceipt = new ScittReceipt(null, null, null, null, null);
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, nullPayloadReceipt, token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+        assertThat(ex.getMessage()).contains("receipt has no event payload");
+    }
+
+    @Test
+    void receiptEventPayloadNotJsonRejected() {
+        ScittReceipt receipt = new ScittReceipt(null, null, null,
+            "not-json".getBytes(StandardCharsets.UTF_8), null);
+        PopException ex = catchThrowableOfType(() -> verifier().verifyParsed(
+            proofJws, receipt, token(ANS_NAME, AGENT_ID, certFingerprint),
+            METHOD, URL, Map.of(), new CountingReplay(false), CallerOptions.none()), PopException.class);
+
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void ansHostRejectsNull() {
+        PopException ex = catchThrowableOfType(() -> CallerVerifier.ansHost(null), PopException.class);
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void ansHostRejectsBlank() {
+        PopException ex = catchThrowableOfType(() -> CallerVerifier.ansHost("  "), PopException.class);
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void ansHostAcceptsBareHostWithoutScheme() throws Exception {
+        assertThat(CallerVerifier.ansHost("Agent.Example.COM")).isEqualTo("agent.example.com");
+    }
+
+    @Test
+    void ansHostStripsVersionLabel() throws Exception {
+        assertThat(CallerVerifier.ansHost("ans://v1.2.3.agent.example.com")).isEqualTo("agent.example.com");
+    }
+
+    @Test
+    void ansHostRejectsInvalidUri() {
+        PopException ex = catchThrowableOfType(
+            () -> CallerVerifier.ansHost("ans://bad host with spaces"), PopException.class);
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    @Test
+    void ansHostRejectsMissingAuthority() {
+        PopException ex = catchThrowableOfType(() -> CallerVerifier.ansHost("ans:///path"), PopException.class);
+        assertThat(ex.category()).isEqualTo(ErrorType.BINDING_FAILED);
+    }
+
+    private static final Duration DEFAULT_SKEW = Duration.ofSeconds(120);
+
+    private static CallerVerifier verifier() {
+        return new CallerVerifier(new FakeScitt(verifiedExpectation()), DEFAULT_SKEW);
+    }
+
+    private static ScittExpectation verifiedExpectation() {
+        return ScittExpectation.verified(List.of(), List.of(), ANS_NAME, Map.of(), null);
+    }
+
+    private static StatusToken token(String ansName, String agentId, String identityFingerprint) {
+        Instant now = Instant.now();
+        return new StatusToken(agentId, StatusToken.Status.ACTIVE, now, now.plusSeconds(3600), ansName,
+            List.of(new CertificateInfo(identityFingerprint, CertType.X509_EV_CLIENT)),
+            List.of(), Map.of(), null);
+    }
+
+    private static ScittReceipt receipt(String agentId, String ansName) {
+        // Mirrors the reference TL envelope: the agent id (ansId) is nested at payload.producer.event.
+        String json = "{\"payload\":{\"producer\":{\"event\":"
+            + "{\"ansId\":\"" + agentId + "\",\"ansName\":\"" + ansName + "\"}}}}";
+        return new ScittReceipt(null, null, null, json.getBytes(StandardCharsets.UTF_8), null);
+    }
+
+    private static KeyPair ec() throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("EC", BouncyCastleProvider.PROVIDER_NAME);
+        generator.initialize(new ECGenParameterSpec("secp256r1"));
+        return generator.generateKeyPair();
+    }
+
+    private static X509Certificate selfSigned(KeyPair keyPair, String ansUri) throws Exception {
+        X500Name dn = new X500Name("CN=test");
+        Instant now = Instant.now();
+        JcaX509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(
+            dn, BigInteger.ONE, Date.from(now.minusSeconds(60)), Date.from(now.plusSeconds(3600)),
+            dn, keyPair.getPublic());
+        if (ansUri != null) {
+            GeneralNames san = new GeneralNames(new GeneralName(GeneralName.uniformResourceIdentifier, ansUri));
+            builder.addExtension(Extension.subjectAlternativeName, false, san);
+        }
+        ContentSigner signer = new JcaContentSignerBuilder("SHA256withECDSA").build(keyPair.getPrivate());
+        return new JcaX509CertificateConverter().setProvider(BouncyCastleProvider.PROVIDER_NAME)
+            .getCertificate(builder.build(signer));
+    }
+
+    // Answers verify() with the given expectations in order, repeating the last one.
+    private static final class FakeScitt implements ScittVerifier {
+        private final ScittExpectation[] expectations;
+        private int calls;
+        private Map<String, PublicKey> lastKeys;
+
+        private FakeScitt(ScittExpectation... expectations) {
+            this.expectations = expectations;
+        }
+
+        @Override
+        public ScittExpectation verify(ScittReceipt receipt, StatusToken token, Map<String, PublicKey> rootKeys) {
+            lastKeys = rootKeys;
+            ScittExpectation expectation = expectations[Math.min(calls, expectations.length - 1)];
+            calls++;
+            return expectation;
+        }
+
+        @Override
+        public ScittVerificationResult postVerify(String hostname, X509Certificate serverCert,
+                                                  ScittExpectation expectation) {
+            return null;
+        }
+    }
+
+    private static final class RecordingRefresher implements RootKeyRefresher {
+        private final Optional<Map<String, PublicKey>> result;
+        private int calls;
+        private Instant lastIssuedAt;
+
+        private RecordingRefresher(Optional<Map<String, PublicKey>> result) {
+            this.result = result;
+        }
+
+        @Override
+        public Optional<Map<String, PublicKey>> refresh(Instant artifactIssuedAt) {
+            calls++;
+            lastIssuedAt = artifactIssuedAt;
+            return result;
+        }
+    }
+
+    private static final class CountingSource implements ContentSource {
+        private final byte[] content;
+        private int reads;
+
+        private CountingSource(byte[] content) {
+            this.content = content;
+        }
+
+        @Override
+        public byte[] read() {
+            reads++;
+            return content;
+        }
+    }
+
+    private static final class CountingReplay implements ReplayCache {
+        private final boolean seen;
+        private int calls;
+
+        private CountingReplay(boolean seen) {
+            this.seen = seen;
+        }
+
+        @Override
+        public boolean checkAndStore(String key, Duration ttl) {
+            calls++;
+            return seen;
+        }
+    }
+}

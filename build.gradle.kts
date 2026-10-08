@@ -20,6 +20,8 @@ val publishableModules = setOf(
     "ans-sdk-discovery",
     "ans-sdk-agent-client",
     "ans-sdk-transparency",
+    "ans-sdk-pop",
+    "ans-sdk-pop-spring",
     "ans-sdk-spring-boot-starter"
 )
 

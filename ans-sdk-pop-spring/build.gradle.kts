@@ -3,7 +3,7 @@ val mockitoVersion: String by project
 val assertjVersion: String by project
 val slf4jVersion: String by project
 
-val springBootVersion = "4.1.0"
+val springBootVersion = "4.1.1"
 
 dependencies {
     // POP protocol (transitively exposes core/crypto/api/transparency types)

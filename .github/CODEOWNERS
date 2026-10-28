@@ -1,2 +1,2 @@
-# Repository Maintainers; see /MAINTAINERS.md.
-* @agentnameservice/sdk-java-maintainers
+# Review routing; merge permissions are managed separately.
+* @agentnameservice/sdk-java-maintainers @agentnameservice/tsc-owners

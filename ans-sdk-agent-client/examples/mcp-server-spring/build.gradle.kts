@@ -7,7 +7,7 @@ plugins {
     application
 }
 
-val springBootVersion = "4.1.1"
+val springBootVersion = "4.1.2"
 val bouncyCastleVersion: String by project
 
 application {
@@ -29,7 +29,7 @@ dependencies {
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor:$springBootVersion")
 
     // MCP SDK (servlet transport)
-    implementation("io.modelcontextprotocol.sdk:mcp:2.0.1")
+    implementation("io.modelcontextprotocol.sdk:mcp:2.1.0")
 
     // ANS SDK - agent client includes transparency module transitively
     implementation(project(":ans-sdk-agent-client"))

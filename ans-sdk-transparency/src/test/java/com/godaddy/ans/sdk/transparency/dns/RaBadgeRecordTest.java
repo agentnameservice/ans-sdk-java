@@ -214,17 +214,16 @@ class RaBadgeRecordTest {
     @Test
     @DisplayName("Should accept bare semver without v prefix")
     void shouldAcceptBareSemverWithoutVPrefix() {
-        // Legacy records may have bare semver (1.0.0) instead of v-prefixed (v1.0.0)
-        // Note: The RaBadgeRecord stores the version as-is. Normalization to v-prefixed
-        // format is expected to happen at the comparison level (BadgeVerificationService).
+        // Records store the version field verbatim — "1.0.0" is stored as "1.0.0".
+        // BadgeVerificationService.filterBadgesByVersion tolerates an optional leading v/V
+        // on both the badge record and the certificate version when comparing.
         String txtValue = "v=ra-badge1; version=1.0.0; url=https://transparency.ans.godaddy.com/v1/agents/bare-semver-agent";
 
         RaBadgeRecord record = RaBadgeRecord.parse(txtValue);
 
         assertThat(record).isNotNull();
         assertThat(record.agentVersion()).isEqualTo("1.0.0"); // Stored as-is
-        // The comparison logic in BadgeVerificationService.extractVersionFromAnsName()
-        // handles the v prefix when matching versions
+        // "v1.0.0" and "1.0.0" are treated as equivalent during version comparison
     }
 
     @Test

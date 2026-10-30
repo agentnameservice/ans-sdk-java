@@ -17,8 +17,9 @@ public enum VerificationStatus {
     DEPRECATED_OK,
 
     /**
-     * The host does not have an ra-badge DNS record, indicating
-     * it is not an ANS-registered agent.
+     * The host does not have an ra-badge DNS record, indicating it is not an ANS-registered agent.
+     * Also returned when the host publishes badge records but none matches the version presented
+     * in the certificate's ANS name (and no versionless record exists).
      */
     NOT_ANS_AGENT,
 

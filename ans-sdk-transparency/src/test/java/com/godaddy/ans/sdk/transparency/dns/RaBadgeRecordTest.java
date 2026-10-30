@@ -2,6 +2,8 @@ package com.godaddy.ans.sdk.transparency.dns;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -249,5 +251,22 @@ class RaBadgeRecordTest {
         assertThat(record).isNotNull();
         assertThat(record.badgeVersion()).isEqualTo("ans-badge1");
         assertThat(record.agentVersion()).isEqualTo("1.0.0");
+    }
+
+    @ParameterizedTest(name = "version={0} stored verbatim")
+    @ValueSource(strings = {"1.0.0", "v1.0.0", "V1.0.0"})
+    @DisplayName("Should store version= field verbatim — normalization happens at compare site")
+    void shouldStoreVersionVerbatim(String versionValue) {
+        // Documents the "normalize at compare site" contract: RaBadgeRecord stores whatever appears
+        // after version= in the TXT record without stripping the v/V prefix. Callers that need to
+        // compare versions (e.g. BadgeVerificationService.filterBadgesByVersion) are responsible
+        // for normalizing both sides before comparing.
+        String txtValue = "v=ra-badge1; version=" + versionValue
+            + "; url=https://transparency.ans.godaddy.com/v1/agents/verbatim-test-agent";
+
+        RaBadgeRecord record = RaBadgeRecord.parse(txtValue);
+
+        assertThat(record).isNotNull();
+        assertThat(record.agentVersion()).isEqualTo(versionValue);
     }
 }

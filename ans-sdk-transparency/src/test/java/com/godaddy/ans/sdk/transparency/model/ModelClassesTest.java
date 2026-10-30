@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.godaddy.ans.sdk.model.LinkedIdentity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.time.OffsetDateTime;
 import java.util.HashMap;
@@ -492,6 +494,53 @@ class ModelClassesTest {
             "{\"type\":\"X509-FUTURE-TYPE\"}",
             CertificateInfo.class);
         assertThat(info.getType()).isNull();
+    }
+
+    @Test
+    @DisplayName("Lowercase CertType in JSON resolves to the constant")
+    void lowercaseCertTypeDeserializesToConstant() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        CertificateInfo info = mapper.readValue(
+            "{\"type\":\"x509-dv-client\"}",
+            CertificateInfo.class);
+        assertThat(info.getType()).isEqualTo(CertType.X509_DV_CLIENT);
+    }
+
+    @ParameterizedTest(name = "{0} round-trips through CertificateInfo")
+    @EnumSource(CertType.class)
+    @DisplayName("Each CertType value round-trips through Jackson CertificateInfo (parameterized)")
+    void eachCertTypeRoundTripsThroughCertificateInfo(CertType expected) throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        CertificateInfo info = mapper.readValue(
+            "{\"type\":\"" + expected.getValue() + "\"}",
+            CertificateInfo.class);
+        assertThat(info.getType()).isEqualTo(expected);
+        String serialized = mapper.writeValueAsString(info);
+        assertThat(serialized).contains(expected.getValue());
+    }
+
+    @Test
+    @DisplayName("CertificateInfoV2 round-trips X509_DV_CLIENT through Jackson")
+    void certificateInfoV2DvClientRoundTrip() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        CertificateInfoV2 info = mapper.readValue(
+            "{\"fingerprint\":\"fp-dv-v2\",\"type\":\"X509-DV-CLIENT\"}",
+            CertificateInfoV2.class);
+        assertThat(info.getType()).isEqualTo(CertType.X509_DV_CLIENT);
+        assertThat(info.getFingerprint()).isEqualTo("fp-dv-v2");
+        String serialized = mapper.writeValueAsString(info);
+        assertThat(serialized).contains("X509-DV-CLIENT");
+    }
+
+    @Test
+    @DisplayName("CertificateInfoV2 unknown cert type deserializes to null without throwing")
+    void certificateInfoV2UnknownTypeDeserializesToNull() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        CertificateInfoV2 info = mapper.readValue(
+            "{\"type\":\"X509-FUTURE-TYPE\",\"fingerprint\":\"fp-unknown\"}",
+            CertificateInfoV2.class);
+        assertThat(info.getType()).isNull();
+        assertThat(info.getFingerprint()).isEqualTo("fp-unknown");
     }
 
     @Test

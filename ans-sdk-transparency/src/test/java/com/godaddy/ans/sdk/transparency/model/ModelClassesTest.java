@@ -464,6 +464,37 @@ class ModelClassesTest {
     }
 
     @Test
+    @DisplayName("CertType X509_DV_CLIENT has correct wire value and fromString works case-insensitively")
+    void certTypeDvClientValueAndFromString() {
+        assertThat(CertType.X509_DV_CLIENT.getValue()).isEqualTo("X509-DV-CLIENT");
+        assertThat(CertType.fromString("X509-DV-CLIENT")).isEqualTo(CertType.X509_DV_CLIENT);
+        assertThat(CertType.fromString("x509-dv-client")).isEqualTo(CertType.X509_DV_CLIENT);
+    }
+
+    @Test
+    @DisplayName("CertType X509_DV_CLIENT round-trips through Jackson CertificateInfo")
+    void certTypeDvClientJacksonRoundTrip() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        CertificateInfo info = mapper.readValue(
+            "{\"fingerprint\":\"fp-dv\",\"type\":\"X509-DV-CLIENT\"}",
+            CertificateInfo.class);
+        assertThat(info.getType()).isEqualTo(CertType.X509_DV_CLIENT);
+        assertThat(info.getFingerprint()).isEqualTo("fp-dv");
+        String json = mapper.writeValueAsString(info);
+        assertThat(json).contains("X509-DV-CLIENT");
+    }
+
+    @Test
+    @DisplayName("Unknown CertType in JSON deserializes to null without throwing")
+    void unknownCertTypeDeserializesToNull() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        CertificateInfo info = mapper.readValue(
+            "{\"type\":\"X509-FUTURE-TYPE\"}",
+            CertificateInfo.class);
+        assertThat(info.getType()).isNull();
+    }
+
+    @Test
     @DisplayName("EventTypeV0 enum values exist")
     void eventTypeV0EnumValuesExist() {
         assertThat(EventTypeV0.values()).contains(

@@ -108,6 +108,39 @@ class VersionChangeHandlingTest {
         }
     }
 
+    // ==================== DV-CLIENT cert type ====================
+
+    @Test
+    @DisplayName("Should verify client with X509-DV-CLIENT identity cert type")
+    void shouldVerifyClientWithDvClientCertType() {
+        try (MockedStatic<CertificateUtils> certUtils = mockStatic(CertificateUtils.class)) {
+            certUtils.when(() -> CertificateUtils.extractFqdn(mockCertificate))
+                .thenReturn(Optional.of(TEST_HOSTNAME));
+            certUtils.when(() -> CertificateUtils.getCommonName(mockCertificate))
+                .thenReturn(TEST_HOSTNAME);
+            certUtils.when(() -> CertificateUtils.extractAnsName(mockCertificate))
+                .thenReturn(Optional.of(TEST_ANS_NAME_V1));
+            certUtils.when(() -> CertificateUtils.computeSha256Fingerprint(mockCertificate))
+                .thenReturn(TEST_FINGERPRINT_V1);
+            certUtils.when(
+                    () -> CertificateUtils.fingerprintMatches(TEST_FINGERPRINT_V1, TEST_FINGERPRINT_V1))
+                .thenReturn(true);
+
+            RaBadgeRecord badge = RaBadgeRecord.parse(
+                "v=ra-badge1; version=1.0.0; url=https://transparency.ans.godaddy.com/v1/agents/"
+                    + TEST_AGENT_ID_V1);
+            when(raBadgeLookupService.lookupBadges(TEST_HOSTNAME)).thenReturn(List.of(badge));
+
+            TransparencyLog registration = createMockRegistrationWithDvClientCert(
+                "ACTIVE", TEST_FINGERPRINT_V1, TEST_ANS_NAME_V1);
+            when(transparencyClient.getAgentTransparencyLog(TEST_AGENT_ID_V1)).thenReturn(registration);
+
+            ClientVerificationResult result = verificationService.verifyClient(mockCertificate);
+
+            assertThat(result.getStatus()).isEqualTo(VerificationStatus.VERIFIED);
+        }
+    }
+
     // ==================== Old version DEPRECATED ====================
 
     @Test
@@ -332,6 +365,44 @@ class VersionChangeHandlingTest {
 
         TransparencyLogV1 v1Payload = new TransparencyLogV1();
         v1Payload.setLogId("log-123");
+        v1Payload.setProducer(producer);
+
+        TransparencyLog log = new TransparencyLog();
+        log.setStatus(status);
+        log.setSchemaVersion("V1");
+        log.setParsedPayload(v1Payload);
+
+        return log;
+    }
+
+    private TransparencyLog createMockRegistrationWithDvClientCert(String status, String fingerprint, String ansName) {
+        CertificateInfo serverCert = new CertificateInfo();
+        serverCert.setFingerprint(fingerprint);
+        serverCert.setType(CertType.X509_DV_SERVER);
+
+        CertificateInfo identityCert = new CertificateInfo();
+        identityCert.setFingerprint(fingerprint);
+        identityCert.setType(CertType.X509_DV_CLIENT);
+
+        AttestationsV1 attestations = new AttestationsV1();
+        attestations.setServerCert(serverCert);
+        attestations.setIdentityCert(identityCert);
+
+        AgentV1 agent = new AgentV1();
+        agent.setHost(TEST_HOSTNAME);
+        agent.setName("Test Agent");
+        agent.setVersion("v1.0.0");
+
+        EventV1 event = new EventV1();
+        event.setAnsName(ansName);
+        event.setAgent(agent);
+        event.setAttestations(attestations);
+
+        ProducerV1 producer = new ProducerV1();
+        producer.setEvent(event);
+
+        TransparencyLogV1 v1Payload = new TransparencyLogV1();
+        v1Payload.setLogId("log-dv-client");
         v1Payload.setProducer(producer);
 
         TransparencyLog log = new TransparencyLog();

@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.1](https://github.com/agentnameservice/ans-sdk-java/compare/v0.2.0...v0.2.1) (2026-11-06)
+
+
+### Miscellaneous
+
+* **deps:** Bump the actions-minor-patch group across 1 directory with 2 updates ([#110](https://github.com/agentnameservice/ans-sdk-java/issues/110)) ([398e463](https://github.com/agentnameservice/ans-sdk-java/commit/398e463ae1ed7ae8963f51bacbdfdd1636420875))
+* **deps:** Bump the actions-minor-patch group across 1 directory with 2 updates ([#115](https://github.com/agentnameservice/ans-sdk-java/issues/115)) ([d821225](https://github.com/agentnameservice/ans-sdk-java/commit/d821225fc746af09475347449d3ce7836a42a46f))
+* **deps:** Bump the actions-minor-patch group across 1 directory with 4 updates ([#127](https://github.com/agentnameservice/ans-sdk-java/issues/127)) ([a114763](https://github.com/agentnameservice/ans-sdk-java/commit/a114763077f95430cfbf5e5471776043abc56636))
+* **deps:** Bump the gradle-minor-patch group across 1 directory with 6 updates ([#114](https://github.com/agentnameservice/ans-sdk-java/issues/114)) ([4db65b0](https://github.com/agentnameservice/ans-sdk-java/commit/4db65b0e9c4085cd3926b82f0a94bac5df29db56))
+* **deps:** Bump the gradle-minor-patch group across 1 directory with 9 updates ([#124](https://github.com/agentnameservice/ans-sdk-java/issues/124)) ([ad46fae](https://github.com/agentnameservice/ans-sdk-java/commit/ad46fae4f5a131406a5bcc6dcadf6036c33c59c7))
+
 ## [0.2.0](https://github.com/agentnameservice/ans-sdk-java/compare/v0.1.9...v0.2.0) (2026-08-28)
 
 

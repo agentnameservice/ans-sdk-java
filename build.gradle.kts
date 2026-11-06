@@ -59,6 +59,15 @@ subprojects {
         options.encoding = "UTF-8"
     }
 
+    tasks.withType<Jar>().configureEach {
+        from(rootProject.files("LICENSE", "NOTICE")) {
+            into("META-INF")
+        }
+        from(rootProject.file("LICENSES")) {
+            into("META-INF/LICENSES")
+        }
+    }
+
     // Run javadoc as part of check/build so doc errors surface locally and in CI,
     // not only when the release job generates the javadoc jar for Maven Central.
     tasks.named("check") {
@@ -105,8 +114,14 @@ subprojects {
 
                 licenses {
                     license {
+                        name.set("Apache License, Version 2.0")
+                        url.set("https://www.apache.org/licenses/LICENSE-2.0")
+                        comments.set("Applies to new original contributions.")
+                    }
+                    license {
                         name.set("MIT License")
                         url.set("https://opensource.org/licenses/MIT")
+                        comments.set("Applies to legacy MIT-licensed material.")
                     }
                 }
 

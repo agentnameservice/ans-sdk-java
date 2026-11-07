@@ -231,12 +231,21 @@ public final class BadgeVerificationService implements ServerVerifier {
                     .build();
             }
 
-            // Step 8: Filter badges by version to reduce TL API calls during version rotation
+            // Step 8: Select badges for the certificate's version (ANS-6 §6.2); also avoids unnecessary TL calls
             List<RaBadgeRecord> filteredBadges = filterBadgesByVersion(validBadges, certVersion);
-            if (filteredBadges.isEmpty()) {
-                // Fall back to all valid badges if no version match (backwards compatibility)
-                LOG.debug("No badges match version {}, checking all {} valid badges", certVersion, validBadges.size());
+            if (certVersion == null) {
+                // No version in cert — check all valid badges (legacy / no-URI-SAN path)
+                LOG.debug("No version in cert, checking all {} valid badges", validBadges.size());
                 filteredBadges = validBadges;
+            } else if (filteredBadges.isEmpty()) {
+                // Version present in cert but no badge matches — per ANS-6 §6.2/§8.1, reject
+                LOG.debug("No badge record for version {}, found {} badge(s) for other versions",
+                    certVersion, validBadges.size());
+                return ClientVerificationResult.builder()
+                    .status(VerificationStatus.NOT_ANS_AGENT)
+                    .warningMessage("No badge record published for version " + certVersion
+                        + "; " + validBadges.size() + " badge record(s) found for other versions")
+                    .build();
             } else {
                 LOG.debug("Filtered {} valid badges to {} matching version {}",
                     validBadges.size(), filteredBadges.size(), certVersion);
@@ -644,22 +653,56 @@ public final class BadgeVerificationService implements ServerVerifier {
     }
 
     /**
-     * Filters badges to only those matching the specified version.
+     * Filters badges to only those matching the specified version, using two-pass semantics
+     * that mirror the Go SDK (ANS-6 §6.2).
      *
-     * <p>This optimization reduces transparency log API calls during version rotation
-     * by only fetching registrations for badges that match the certificate version.</p>
+     * <p>Pass 1: badges whose {@code agentVersion}, after stripping one optional leading
+     * {@code v} or {@code V}, equals the normalized {@code version}.  If any match, they
+     * are returned immediately.</p>
      *
-     * @param badges the list of badges to filter
-     * @param version the version to match (may be null)
-     * @return filtered list, or empty if no matches (caller should fall back to all badges)
+     * <p>Pass 2: badges that carry no {@code version=} field ({@code agentVersion == null}).
+     * These are legacy/versionless records accepted as a fallback for backwards
+     * compatibility.</p>
+     *
+     * <p>When {@code version} or {@code badges} is {@code null} an empty list is returned;
+     * the caller decides whether to proceed with all badges or reject.</p>
+     *
+     * @param badges  the list of badges to filter
+     * @param version the version to match (may be null; null causes empty return)
+     * @return exact-version matches if any, otherwise versionless records, otherwise empty
      */
     private List<RaBadgeRecord> filterBadgesByVersion(List<RaBadgeRecord> badges, String version) {
         if (version == null || badges == null) {
             return List.of();
         }
-        return badges.stream()
-            .filter(badge -> version.equals(badge.agentVersion()))
+        String normalizedVersion = normalizeVersion(version);
+        // Pass 1: exact version match (lenient v/V prefix on both sides)
+        List<RaBadgeRecord> exactMatches = badges.stream()
+            .filter(badge -> normalizedVersion.equals(normalizeVersion(badge.agentVersion())))
             .collect(Collectors.toList());
+        if (!exactMatches.isEmpty()) {
+            return exactMatches;
+        }
+        // Pass 2: versionless records as fallback
+        return badges.stream()
+            .filter(badge -> badge.agentVersion() == null)
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * Normalizes a version string by stripping exactly one optional leading {@code v} or {@code V}.
+     *
+     * @param version the version string to normalize (may be null)
+     * @return the normalized version, or {@code null} if the input is {@code null}
+     */
+    private static String normalizeVersion(String version) {
+        if (version == null) {
+            return null;
+        }
+        if (version.length() > 1 && (version.charAt(0) == 'v' || version.charAt(0) == 'V')) {
+            return version.substring(1);
+        }
+        return version;
     }
 
     /**

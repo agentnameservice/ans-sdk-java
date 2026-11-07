@@ -105,7 +105,8 @@ public final class ClientVerificationResult {
     }
 
     /**
-     * Returns true if the client is not an ANS agent (no ra-badge record).
+     * Returns true if the client is not an ANS agent: no ra-badge record exists for the host,
+     * or none matches the version in the certificate's ANS name.
      *
      * @return true if not an ANS agent
      */

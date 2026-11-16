@@ -59,7 +59,7 @@ subprojects {
         options.encoding = "UTF-8"
     }
 
-    tasks.withType<Jar>().configureEach {
+    tasks.withType<org.gradle.jvm.tasks.Jar>().configureEach {
         from(rootProject.files("LICENSE", "NOTICE")) {
             into("META-INF")
         }

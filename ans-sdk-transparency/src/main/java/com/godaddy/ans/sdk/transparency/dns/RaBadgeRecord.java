@@ -8,18 +8,20 @@ import java.util.regex.Pattern;
  *
  * <p>The _ra-badge TXT record format is:</p>
  * <pre>
- * v=ra-badge1; version=1.0.0; url=https://transparency.ans.godaddy.com/v1/agents/{uuid}
+ * v=ra-badge1; version=v1.0.0; url=https://transparency.ans.godaddy.com/v1/agents/{uuid}
  * </pre>
  *
  * <p>Where:</p>
  * <ul>
  *   <li>{@code v=ra-badge1} - the badge format version</li>
- *   <li>{@code version=1.0.0} - the agent's semantic version (optional for backwards compatibility)</li>
+ *   <li>{@code version=v1.0.0} - the agent's semantic version in canonical form (optional for
+ *       backwards compatibility); a bare form without the leading {@code v} (e.g., {@code 1.0.0})
+ *       is also accepted</li>
  *   <li>{@code url=...} - the transparency log URL for this agent</li>
  * </ul>
  *
  * @param badgeVersion the badge format version (e.g., "ra-badge1")
- * @param agentVersion the agent's semantic version (e.g., "1.0.0"), may be null
+ * @param agentVersion the agent's semantic version (e.g., "v1.0.0"), stored verbatim, may be null
  * @param url the full transparency log URL
  * @param agentId the extracted agent ID from the URL
  */

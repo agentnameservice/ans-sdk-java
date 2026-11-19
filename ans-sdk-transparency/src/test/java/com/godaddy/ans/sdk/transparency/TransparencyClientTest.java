@@ -9,6 +9,7 @@ import com.godaddy.ans.sdk.model.LinkedIdentity;
 import com.godaddy.ans.sdk.transparency.model.AgentAuditParams;
 import com.godaddy.ans.sdk.transparency.model.AgentIdentitiesResponse;
 import com.godaddy.ans.sdk.transparency.model.CheckpointResponse;
+import com.godaddy.ans.sdk.transparency.model.CertType;
 import com.godaddy.ans.sdk.transparency.model.EventTypeV1;
 import com.godaddy.ans.sdk.transparency.model.IdentityLinkedAgentsResponse;
 import com.godaddy.ans.sdk.transparency.model.LinkedAgentView;
@@ -91,6 +92,55 @@ class TransparencyClientTest {
         assertThat(result.getIdentityCertFingerprint()).isEqualTo("SHA256:e5f6g7h8");
         assertThat(result.getAnsName()).isEqualTo("ans://v1.0.0.agent.example.com");
         assertThat(result.getAgentHost()).isEqualTo("agent.example.com");
+    }
+
+    @Test
+    @DisplayName("Should parse V1 log with X509-DV-CLIENT identity cert type")
+    void shouldParseV1LogWithDvClientCertType(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withHeader("X-Schema-Version", "V1")
+                .withBody(v1TransparencyLogResponseWithDvClientCert())));
+
+        TransparencyClient client = TransparencyClient.builder()
+            .baseUrl(baseUrl)
+            .build();
+
+        TransparencyLog result = client.getAgentTransparencyLog(TEST_AGENT_ID);
+
+        assertThat(result.getV1Payload()).isNotNull();
+        assertThat(result.getIdentityCertFingerprint()).isEqualTo("SHA256:d1c2b3a4");
+        TransparencyLogV1 v1 = result.getV1Payload();
+        assertThat(v1.getProducer().getEvent().getAttestations().getIdentityCert().getType())
+            .isEqualTo(CertType.X509_DV_CLIENT);
+    }
+
+    @Test
+    @DisplayName("Unknown cert type in V1 log: payload non-null, fingerprint resolvable, type null")
+    void shouldParseV1LogWithUnknownCertType(WireMockRuntimeInfo wmRuntimeInfo) {
+        String baseUrl = wmRuntimeInfo.getHttpBaseUrl();
+
+        stubFor(get(urlEqualTo("/v1/agents/" + TEST_AGENT_ID))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withHeader("X-Schema-Version", "V1")
+                .withBody(v1TransparencyLogResponseWithUnknownCertType())));
+
+        TransparencyClient client = TransparencyClient.builder()
+            .baseUrl(baseUrl)
+            .build();
+
+        TransparencyLog result = client.getAgentTransparencyLog(TEST_AGENT_ID);
+
+        assertThat(result.getV1Payload()).isNotNull();
+        assertThat(result.getIdentityCertFingerprint()).isEqualTo("SHA256:e5f6g7h8");
+        TransparencyLogV1 v1 = result.getV1Payload();
+        assertThat(v1.getProducer().getEvent().getAttestations().getIdentityCert().getType()).isNull();
     }
 
     @Test
@@ -1485,6 +1535,90 @@ class TransparencyClientTest {
     }
 
     // ==================== Test Data ====================
+
+    private String v1TransparencyLogResponseWithDvClientCert() {
+        return """
+            {
+              "status": "ACTIVE",
+              "schemaVersion": "V1",
+              "payload": {
+                "logId": "log-456",
+                "producer": {
+                  "event": {
+                    "ansId": "7cf3c8b0-2494-5f44-b056-956f45bf8637",
+                    "ansName": "ans://v1.0.0.dv-agent.example.com",
+                    "eventType": "AGENT_REGISTERED",
+                    "agent": {
+                      "host": "dv-agent.example.com",
+                      "name": "DV Agent",
+                      "version": "v1.0.0"
+                    },
+                    "attestations": {
+                      "domainValidation": "ACME-DNS-01",
+                      "serverCert": {
+                        "fingerprint": "SHA256:a1b2c3d4",
+                        "type": "X509-DV-SERVER"
+                      },
+                      "identityCert": {
+                        "fingerprint": "SHA256:d1c2b3a4",
+                        "type": "X509-DV-CLIENT"
+                      }
+                    },
+                    "issuedAt": "2025-09-24T21:03:47.055Z",
+                    "expiresAt": "2026-09-24T21:03:47.055Z",
+                    "raId": "ra.example.com",
+                    "timestamp": "2025-09-24T21:03:47.055Z"
+                  },
+                  "keyId": "key-2",
+                  "signature": "sig456"
+                }
+              },
+              "signature": "eyJhbGci..."
+            }
+            """;
+    }
+
+    private String v1TransparencyLogResponseWithUnknownCertType() {
+        return """
+            {
+              "status": "ACTIVE",
+              "schemaVersion": "V1",
+              "payload": {
+                "logId": "log-789",
+                "producer": {
+                  "event": {
+                    "ansId": "6bf2b7a9-1383-4e33-a945-845f34af7526",
+                    "ansName": "ans://v1.0.0.agent.example.com",
+                    "eventType": "AGENT_REGISTERED",
+                    "agent": {
+                      "host": "agent.example.com",
+                      "name": "Example Agent",
+                      "version": "v1.0.0"
+                    },
+                    "attestations": {
+                      "domainValidation": "ACME-DNS-01",
+                      "serverCert": {
+                        "fingerprint": "SHA256:a1b2c3d4",
+                        "type": "X509-DV-SERVER"
+                      },
+                      "identityCert": {
+                        "fingerprint": "SHA256:e5f6g7h8",
+                        "type": "X509-FUTURE-TYPE"
+                      }
+                    },
+                    "issuedAt": "2025-09-24T21:03:47.055Z",
+                    "expiresAt": "2026-09-24T21:03:47.055Z",
+                    "raId": "ra.example.com",
+                    "timestamp": "2025-09-24T21:03:47.055Z"
+                  },
+                  "keyId": "key-1",
+                  "signature": "sig123"
+                }
+              },
+              "signature": "eyJhbGci..."
+            }
+            """;
+    }
 
     private String v1TransparencyLogResponse() {
         return """

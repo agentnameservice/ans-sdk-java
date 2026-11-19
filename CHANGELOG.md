@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.2](https://github.com/agentnameservice/ans-sdk-java/compare/v0.2.1...v0.2.2) (2026-11-19)
+
+
+### Miscellaneous
+
+* adopt ANS governance and contribution licensing ([#122](https://github.com/agentnameservice/ans-sdk-java/issues/122)) ([90ccc38](https://github.com/agentnameservice/ans-sdk-java/commit/90ccc3894d8338cc48bf810a91962070b93ac711))
+* **deps:** Bump the actions-minor-patch group across 1 directory with 2 updates ([#128](https://github.com/agentnameservice/ans-sdk-java/issues/128)) ([9039391](https://github.com/agentnameservice/ans-sdk-java/commit/903939132941a3d38abd39dd20478f591775f483))
+
 ## [0.2.1](https://github.com/agentnameservice/ans-sdk-java/compare/v0.2.0...v0.2.1) (2026-11-06)
 
 
